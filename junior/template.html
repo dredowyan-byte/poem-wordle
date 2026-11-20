@@ -277,7 +277,7 @@
       <div class="tile">会</div><div class="tile">当</div><div class="tile absent">凌</div>
       <span class="cap">灰：句中无此字</span>
     </div>
-    <p style="margin-top:6px">题目 80% 出自初中课本（七上—九下），20% 出自课外名句。字可点选，也可用输入法直接打字。每天一句，也可随时开新题。</p>
+    <p style="margin-top:6px">题目 80% 出自初中课本（七上—九下），20% 出自课外名句。字可点选，也可用输入法直接打字。每次打开随机一题，最近玩过的 24 句不会重复；想玩当天固定的题目，在网址后加 #daily。</p>
     <button class="btn primary" id="help-close" style="width:100%;margin-top:6px">开始</button>
   </div>
 </div>
@@ -663,13 +663,31 @@ function startDaily() {
   }
 }
 
-function startPractice() {
-  const seed = Date.now() ^ Math.floor(Math.random() * 1e9);
-  const rand = mulberry32(seed >>> 0);
+/* 最近玩过的句子，用来避免短期内重复出题 */
+function recentList() {
+  return store.get("recent", []);
+}
+
+function rememberAnswer(line) {
+  const r = recentList();
+  r.push(line);
+  store.set("recent", r.slice(-24));
+}
+
+/* 随机抽题：跳过最近 24 句，保证每次打开都不一样 */
+function startRandom() {
+  const rand = mulberry32((Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0);
+  const recent = recentList();
   let poem = pickPoem(rand);
-  // 避免连续抽到同一句
-  if (state.poem && poem.l === state.answer) poem = pickPoem(rand);
-  start(poem, "practice", null);
+  for (let i = 0; i < 40 && recent.includes(poem.l); i++) poem = pickPoem(rand);
+  rememberAnswer(poem.l);
+  start(poem, "random", null);
+}
+
+/* 默认每次打开随机一题；网址后加 #daily 才是当天固定的题目 */
+function startGame() {
+  if (location.hash === "#daily") startDaily();
+  else startRandom();
 }
 
 /* ===================== 分享 ===================== */
@@ -678,7 +696,7 @@ function shareText() {
   const grid = state.guesses.map(g => g.marks.map(m => emoji[m]).join("")).join("\n");
   const head = state.mode === "daily"
     ? `诗句 Wordle ${todayKey()}`
-    : `诗句 Wordle · 练习`;
+    : `诗句 Wordle · 随机`;
   return `${head}  ${state.win ? state.tries : "X"}/${state.maxTries}\n${grid}\n《${state.poem.t}》${state.poem.a}`;
 }
 
@@ -766,7 +784,7 @@ $("btn-hint").addEventListener("click", () => {
 });
 
 $("r-next").addEventListener("click", () => {
-  startPractice();
+  startRandom();
   focusIME();
 });
 $("r-share").addEventListener("click", doShare);
@@ -823,7 +841,7 @@ const STATS_CODE = "dredowyan";
 })();
 
 /* 启动 */
-startDaily();
+startGame();
 if (matchMedia("(pointer:fine)").matches) focusIME();
 </script>
 </body>
