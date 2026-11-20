@@ -73,6 +73,30 @@ cd ../gaokao && python build.py  # 输出 ../gaokao.html
 
 > GitHub 仓库自带的 Insights → Traffic 只统计 github.com 上的仓库页面，不统计 Pages 站点，看不到玩家人数。
 
+## 留言板
+
+留言存在 Supabase（免费额度足够），不填配置时入口不显示。
+
+1. 注册 https://supabase.com ，新建 project（区域选 Singapore / Tokyo，国内访问相对快）
+2. 左侧 SQL Editor → New query → 粘贴 `supabase/schema.sql` 全文 → Run
+3. Project Settings → API，复制 `Project URL` 和 `anon public` key
+4. 把这两个值填进 `junior/template.html` 和 `gaokao/template.html`：
+
+```js
+const GUEST = {
+  url: "https://xxxxxxxx.supabase.co",
+  key: "eyJhbGciOiJIUzI1NiIsInR5cCI6..."
+};
+```
+
+5. 重新 build 并推送
+
+`anon` key 是公开密钥，设计上就放在前端，安全性由 RLS 保证：`schema.sql` 只开放了 `select` 和 `insert`，前端拿不到改和删的能力。删留言去 Supabase 的 Table Editor。
+
+防刷手段：昵称 20 字 / 正文 200 字上限（数据库 CHECK 约束兜底）、表单蜜罐字段、同一浏览器 30 秒内只能发一条。
+
+注意 Supabase 免费项目连续 7 天无请求会暂停，重新打开控制台点一下恢复即可。
+
 ## 许可
 
 代码 MIT。诗句均为公有领域作品。

@@ -187,6 +187,26 @@
   .dist em{font-style:normal;width:12px;text-align:right}
   .hint-line{font-size:12px;color:var(--muted);text-align:center;padding:2px 0 8px;letter-spacing:.04em;min-height:18px}
   .hint-line b{color:var(--accent);font-weight:500}
+  /* ---------- 留言板 ---------- */
+  .icon[hidden]{display:none}
+  .icon.zh{font-family:var(--tile-font);font-size:15px}
+  .gb-form{display:flex;flex-direction:column;gap:8px;margin:12px 0 2px;position:relative}
+  .gb-form input,.gb-form textarea{
+    width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:8px;
+    color:var(--ink);font-family:var(--ui-font);font-size:13px;padding:9px 11px;outline:none;
+    transition:border-color .15s;
+  }
+  .gb-form input:focus,.gb-form textarea:focus{border-color:var(--muted)}
+  .gb-form textarea{resize:vertical;min-height:66px;line-height:1.6}
+  .gb-hp{position:absolute!important;left:-9999px!important;width:1px;height:1px;opacity:0}
+  .gb-list{margin-top:14px;max-height:32dvh;overflow:auto;border-top:1px solid var(--line);padding-top:8px}
+  .gb-item{padding:9px 0;border-bottom:1px dashed var(--line)}
+  .gb-item:last-child{border-bottom:0}
+  .gb-meta{display:flex;justify-content:space-between;gap:8px;font-size:11px;color:var(--muted);margin-bottom:3px}
+  .gb-meta b{color:var(--ink);font-weight:500;font-family:var(--tile-font);font-size:12px}
+  .gb-body{font-size:13px;line-height:1.7;white-space:pre-wrap;word-break:break-word}
+  .gb-empty{font-size:12px;color:var(--muted);text-align:center;padding:16px 0}
+  .gb-tip{font-size:12px;color:var(--muted);margin:0 0 4px}
   .statbar{text-align:center;font-size:10px;color:var(--muted);letter-spacing:.1em;padding:6px 0 0}
   .statbar b{font-weight:500;color:color-mix(in srgb,var(--ink) 65%,transparent);font-family:var(--tile-font);font-size:11px}
 
@@ -214,6 +234,7 @@
         <div class="sub">猜一句古诗</div>
       </div>
     </div>
+    <button class="icon zh" id="btn-guest" title="留言板" hidden>言</button>
     <button class="icon" id="btn-theme" title="切换明暗">◐</button>
     <button class="icon" id="btn-stats" title="统计">▤</button>
     <button class="icon" id="btn-help" title="玩法">?</button>
@@ -281,6 +302,21 @@
     </div>
     <p style="margin-top:6px">题目 80% 出自初中课本（七上—九下），20% 出自课外名句。字可点选，也可用输入法直接打字。每次打开随机一题，最近玩过的 24 句不会重复；想玩当天固定的题目，在网址后加 #daily。</p>
     <button class="btn primary" id="help-close" style="width:100%;margin-top:6px">开始</button>
+  </div>
+</div>
+
+<div class="mask" id="mask-guest">
+  <div class="modal">
+    <h2>留言板</h2>
+    <p class="gb-tip">不用登录，昵称可以留空。留言会公开显示，请勿发广告。</p>
+    <form class="gb-form" id="gb-form">
+      <input id="gb-nick" maxlength="20" placeholder="昵称（可留空）" autocomplete="off">
+      <textarea id="gb-body" maxlength="200" placeholder="想说的话…（最多 200 字）"></textarea>
+      <input class="gb-hp" id="gb-hp" tabindex="-1" autocomplete="off" aria-hidden="true">
+      <button class="btn primary" type="submit" id="gb-send">发送</button>
+    </form>
+    <div class="gb-list" id="gb-list"></div>
+    <button class="btn primary" id="guest-close" style="width:100%;margin-top:14px">关闭</button>
   </div>
 </div>
 
@@ -849,6 +885,108 @@ const STATS_CODE = "dredowyan";
       $("statbar").hidden = false;
     })
     .catch(() => {});
+})();
+
+/* ===================== 留言板 ===================== */
+/* 填上 Supabase 项目的 URL 与 anon public key 即启用；留空则整个入口不显示。 */
+const GUEST = {
+  url: "",
+  key: ""
+};
+
+const gbReady = () => !!(GUEST.url && GUEST.key);
+
+function gbHeaders() {
+  return {
+    apikey: GUEST.key,
+    Authorization: "Bearer " + GUEST.key,
+    "Content-Type": "application/json"
+  };
+}
+
+function gbTime(iso) {
+  const d = new Date(iso);
+  const p = n => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+async function gbLoad() {
+  const list = $("gb-list");
+  if (!gbReady()) { list.innerHTML = `<div class="gb-empty">留言板还没接通后端。</div>`; return; }
+  list.innerHTML = `<div class="gb-empty">加载中…</div>`;
+  try {
+    const r = await fetch(
+      `${GUEST.url}/rest/v1/messages?select=nick,body,created_at&order=created_at.desc&limit=50`,
+      { headers: gbHeaders() }
+    );
+    if (!r.ok) throw new Error(r.status);
+    const rows = await r.json();
+    list.innerHTML = "";
+    if (!rows.length) {
+      list.innerHTML = `<div class="gb-empty">还没有人留言，来当第一个。</div>`;
+      return;
+    }
+    for (const m of rows) {
+      const item = document.createElement("div");
+      item.className = "gb-item";
+      const meta = document.createElement("div");
+      meta.className = "gb-meta";
+      const nick = document.createElement("b");
+      nick.textContent = m.nick || "匿名";
+      const time = document.createElement("span");
+      time.textContent = gbTime(m.created_at);
+      meta.append(nick, time);
+      const body = document.createElement("div");
+      body.className = "gb-body";
+      body.textContent = m.body;
+      item.append(meta, body);
+      list.appendChild(item);
+    }
+  } catch {
+    list.innerHTML = `<div class="gb-empty">留言加载失败，稍后再试。</div>`;
+  }
+}
+
+async function gbSend(e) {
+  e.preventDefault();
+  if (!gbReady()) return;
+  if ($("gb-hp").value) return;                        // 蜜罐命中，静默丢弃
+  const nick = $("gb-nick").value.trim() || "匿名";
+  const body = $("gb-body").value.trim();
+  if (!body) { toast("先写点什么"); return; }
+  const last = +store.get("gbLast", 0);
+  if (Date.now() - last < 30000) { toast("发得太快了，歇一下"); return; }
+  $("gb-send").disabled = true;
+  try {
+    const r = await fetch(`${GUEST.url}/rest/v1/messages`, {
+      method: "POST",
+      headers: { ...gbHeaders(), Prefer: "return=minimal" },
+      body: JSON.stringify({ nick, body })
+    });
+    if (!r.ok) throw new Error(r.status);
+    store.set("gbLast", Date.now());
+    $("gb-body").value = "";
+    toast("留言已发出");
+    gbLoad();
+  } catch {
+    toast("发送失败，稍后再试");
+  } finally {
+    $("gb-send").disabled = false;
+  }
+}
+
+(function initGuest() {
+  if (!gbReady()) return;
+  $("btn-guest").hidden = false;
+  $("btn-guest").addEventListener("click", () => {
+    $("mask-guest").classList.add("show");
+    gbLoad();
+  });
+  $("gb-form").addEventListener("submit", gbSend);
+  $("guest-close").addEventListener("click", () => {
+    $("mask-guest").classList.remove("show");
+    focusIME();
+  });
 })();
 
 /* 启动 */
