@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<title>诗句 Wordle · 猜一句古诗</title>
+<style>
+  :root{
+    --bg:#12100f; --panel:#1a1715; --panel2:#221d1a;
+    --ink:#ece4d8; --muted:#a89d92; --line:#453c34;
+    --correct:#2f6f4f; --present:#96651a; --absent:#3a3431;
+    --accent:#c4472f; --shadow:0 18px 50px rgba(0,0,0,.55);
+    --tile-font:"Noto Serif SC","Source Han Serif SC","Songti SC","STSong","SimSun",serif;    --ui-font:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  }
+  html[data-theme="light"]{
+    --bg:#f6f1e7; --panel:#fffdf8; --panel2:#efe7d8;
+    --ink:#241f1a; --muted:#6f6459; --line:#c8b9a1;
+    --correct:#3d8a63; --present:#b07d1c; --absent:#e6ddcc;
+    --accent:#b03a22; --shadow:0 18px 50px rgba(90,70,40,.18);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:var(--ui-font);
+    display:flex; justify-content:center;
+    background-image:radial-gradient(120% 60% at 50% -10%, rgba(196,71,47,.10), transparent 70%);
+    transition:background-color .3s, color .3s;
+    overflow-x:hidden;
+  }
+  .app{
+    width:100%; max-width:560px; min-width:0; min-height:100dvh;
+    display:flex; flex-direction:column;
+    padding:14px 16px calc(14px + env(safe-area-inset-bottom));
+  }
+
+  /* ---------- header ---------- */
+  header{display:flex; align-items:center; gap:7px; padding-bottom:12px; border-bottom:1px solid var(--line)}
+  .brand{flex:1; display:flex; align-items:center; gap:8px; min-width:0; overflow:hidden}
+  .seal{
+    width:26px;height:26px;border-radius:4px;background:var(--accent);
+    color:#fff; font-family:var(--tile-font); font-size:15px;
+    display:grid;place-items:center;flex:none; transform:rotate(-2deg);
+    box-shadow:0 2px 10px rgba(196,71,47,.35);
+  }
+  h1{font-family:var(--tile-font); font-size:clamp(17px,4.9vw,20px); margin:0; letter-spacing:.05em; font-weight:600; white-space:nowrap}
+  .sub{font-size:10px; color:var(--muted); letter-spacing:.12em; white-space:nowrap}
+  .icon{
+    width:32px;height:32px;border-radius:9px;border:1px solid var(--line);
+    background:transparent;color:var(--muted);font-size:14px;cursor:pointer;
+    display:grid;place-items:center;transition:.18s;flex:none;
+  }
+  .icon:hover{color:var(--ink);border-color:var(--muted)}
+
+  /* ---------- meta ---------- */
+  .meta{
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    padding:12px 0 4px; font-size:12px; color:var(--muted); letter-spacing:.05em; min-height:32px;
+  }
+  .tag{
+    padding:2px 9px;border-radius:999px;border:1px solid var(--line);
+    font-size:11px;letter-spacing:.06em;white-space:nowrap;
+  }
+  .tag.hot{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+  a.tag{text-decoration:none;color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,transparent);transition:.15s}
+  a.tag:hover{background:color-mix(in srgb,var(--accent) 14%,transparent)}
+
+  /* ---------- board ---------- */
+  .board-wrap{flex:1; display:flex; align-items:center; justify-content:center; padding:10px 0 6px; position:relative}
+  .board{
+    --gap:7px;
+    display:grid; gap:var(--gap); margin:0 auto;
+    width:min(100%, 420px, max(210px, calc((100dvh - 410px - (var(--rows,6) - 1) * 7px) / var(--rows,6) * var(--cols,7) + (var(--cols,7) - 1) * 7px)));
+  }
+  .row{display:grid; gap:7px; grid-template-columns:repeat(var(--cols,7),1fr)}
+  .tile{
+    position:relative; aspect-ratio:1/1; border:1.5px solid var(--line); border-radius:7px;
+    display:grid; place-items:center; font-family:var(--tile-font);
+    font-size:clamp(19px,5.6vw,29px); line-height:1; color:var(--ink);
+    background:var(--panel);
+    transition:border-color .15s, background-color .15s, transform .1s;
+    user-select:none;
+  }
+  .tile.filled{border-color:color-mix(in srgb,var(--ink) 45%,transparent); animation:pop .12s ease-out}
+  .tile.cursor{border-color:color-mix(in srgb,var(--ink) 35%,transparent)}
+  .tile.cursor::after{
+    content:"";position:absolute;bottom:14%;left:50%;transform:translateX(-50%);
+    width:34%;height:2px;background:var(--accent);border-radius:2px;opacity:.85;
+    animation:blink 1.1s steps(1) infinite;
+  }
+  .tile.correct{background:var(--correct);border-color:var(--correct);color:#fff}
+  .tile.present{background:var(--present);border-color:var(--present);color:#fff}
+  .tile.absent{background:var(--absent);border-color:var(--absent);color:var(--muted)}
+  html[data-theme="light"] .tile.absent{color:#9a8e7e}
+  .tile.flip{animation:flip .52s ease both}
+  .row.shake{animation:shake .4s}
+  @keyframes pop{from{transform:scale(.94)}to{transform:scale(1)}}
+  @keyframes blink{0%,49%{opacity:.85}50%,100%{opacity:0}}
+  @keyframes flip{0%{transform:rotateX(0)}48%{transform:rotateX(88deg)}100%{transform:rotateX(0)}}
+  @keyframes shake{10%,90%{transform:translateX(-2px)}30%,70%{transform:translateX(4px)}50%{transform:translateX(-4px)}}
+
+  /* ---------- toast ---------- */
+  .toast{
+    position:fixed;left:50%;top:74px;transform:translate(-50%,-14px);
+    background:var(--ink);color:var(--bg);font-size:13px;padding:9px 16px;border-radius:9px;
+    opacity:0;pointer-events:none;transition:.22s;z-index:60;white-space:nowrap;max-width:88vw;
+    font-weight:500;
+  }
+  .toast.show{opacity:1;transform:translate(-50%,0)}
+
+  /* ---------- pool / keys ---------- */
+  .tray{margin-top:auto; padding-top:8px}
+  .tray.tray-hidden{display:none}
+  .pool-head{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:11px;color:var(--muted);padding:0 2px 7px;letter-spacing:.08em;overflow:hidden;white-space:nowrap;max-width:var(--board-w,420px);margin:0 auto}
+  #pool-tip{text-overflow:ellipsis;overflow:hidden}
+  .pool-head b{font-weight:500;color:color-mix(in srgb,var(--ink) 70%,transparent)}
+  .pool{display:grid;grid-template-columns:repeat(var(--pool-cols,9),1fr);gap:5px;max-width:var(--board-w,420px);margin:0 auto}
+  .key{
+    position:relative; height:44px; border-radius:8px; border:1px solid var(--line);
+    background:var(--panel); color:var(--ink); font-family:var(--tile-font); font-size:18px;
+    cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    transition:transform .08s, background-color .2s, color .2s, border-color .2s; padding:0;
+    line-height:1.05; min-width:0;
+  }
+  .key .py{font-family:var(--ui-font);font-size:9px;color:var(--muted);letter-spacing:0;transform:scale(.95);margin-top:1px;height:9px;overflow:hidden}
+  .key:active{transform:scale(.94)}
+  .key.correct{background:var(--correct);border-color:var(--correct);color:#fff}
+  .key.correct .py{color:rgba(255,255,255,.75)}
+  .key.present{background:var(--present);border-color:var(--present);color:#fff}
+  .key.present .py{color:rgba(255,255,255,.75)}
+  .key.absent{background:var(--absent);color:var(--muted);border-color:var(--absent)}
+  .key.absent .py{color:transparent}
+  .key:disabled{opacity:.42;cursor:default}
+  .actions{display:flex;gap:8px;margin-top:8px;max-width:var(--board-w,420px);margin-left:auto;margin-right:auto}
+  .btn{
+    flex:1;height:44px;border-radius:9px;border:1px solid var(--line);background:var(--panel2);
+    color:var(--ink);font-size:14px;font-family:var(--ui-font);cursor:pointer;letter-spacing:.1em;
+    transition:.15s;
+  }
+  .btn:hover{border-color:var(--muted)}
+  .btn:active{transform:scale(.985)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  .btn.primary:hover{filter:brightness(1.08)}
+  .btn.ghost{flex:0 0 auto;padding:0 15px;background:transparent;color:var(--muted)}
+  .btn:disabled{opacity:.45;cursor:default}
+
+  /* ---------- result ---------- */
+  .result{
+    margin-top:10px; border:1px solid var(--line); border-radius:12px; background:var(--panel);
+    padding:14px 16px; display:none; animation:rise .35s ease both;
+  }
+  .result.show{display:block}
+  @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  .result .line{font-family:var(--tile-font);font-size:21px;letter-spacing:.14em;line-height:1.5;text-align:center}
+  .result .from{text-align:center;font-size:12px;color:var(--muted);margin-top:6px;letter-spacing:.05em}
+  .result .note{text-align:center;font-size:12px;margin-top:10px;color:var(--muted)}
+  .result .note b{color:var(--correct)}
+  .result .row2{display:flex;gap:8px;margin-top:12px}
+
+  /* ---------- modal ---------- */
+  .mask{
+    position:fixed;inset:0;background:rgba(0,0,0,.62);
+    display:none;align-items:center;justify-content:center;padding:20px;z-index:80;
+  }
+  .mask.show{display:flex}
+  .modal{
+    background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    max-width:420px;width:100%;padding:22px;box-shadow:var(--shadow);max-height:82dvh;overflow:auto;
+    animation:rise .28s ease both;
+  }
+  .modal h2{font-family:var(--tile-font);font-size:18px;margin:0 0 14px;letter-spacing:.08em}
+  .modal p,.modal li{font-size:13px;line-height:1.85;color:color-mix(in srgb,var(--ink) 82%,transparent);margin:0 0 10px}
+  .modal ul{padding-left:18px;margin:0 0 12px}
+  .demo{display:flex;gap:6px;margin:8px 0 14px;align-items:center}
+  .demo .tile{width:40px;height:40px;font-size:17px;aspect-ratio:auto;border-radius:6px;animation:none}
+  .demo .cap{font-size:12px;color:var(--muted);margin-left:8px}
+  .stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}
+  .stat{background:var(--panel2);border-radius:9px;padding:10px 4px;text-align:center}
+  .stat b{display:block;font-size:20px;font-family:var(--tile-font)}
+  .stat span{font-size:10px;color:var(--muted);letter-spacing:.06em}
+  .dist{display:flex;flex-direction:column;gap:5px;margin-bottom:6px}
+  .dist div{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted)}
+  .dist .bar{flex:1;height:16px;border-radius:4px;background:var(--absent);overflow:hidden}
+  .dist .bar i{display:block;height:100%;background:var(--correct);border-radius:4px;width:0;transition:width .4s}
+  .dist .bar i.zero{background:var(--line)}
+  .dist em{font-style:normal;width:12px;text-align:right}
+  .hint-line{font-size:12px;color:var(--muted);text-align:center;padding:2px 0 8px;letter-spacing:.04em;min-height:18px}
+  .hint-line b{color:var(--accent);font-weight:500}
+
+  /* hidden IME input */
+  .ime{
+    position:fixed;left:0;bottom:0;width:1px;height:1px;opacity:0;border:0;padding:0;
+    background:transparent;color:transparent;caret-color:transparent;font-size:16px;z-index:-1;
+  }
+  @media (max-width:380px){
+    .app{padding-left:12px;padding-right:12px}
+    .sub{display:none}
+    .pool{gap:4px}
+    .key{height:38px;font-size:15px}
+    .key .py{font-size:7px;height:8px}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <div class="seal">诗</div>
+      <div>
+        <h1>诗句 Wordle</h1>
+        <div class="sub">猜一句古诗</div>
+      </div>
+    </div>
+    <button class="icon" id="btn-theme" title="切换明暗">◐</button>
+    <button class="icon" id="btn-stats" title="统计">▤</button>
+    <button class="icon" id="btn-help" title="玩法">?</button>
+  </header>
+
+  <div class="meta" id="meta"></div>
+
+  <div class="board-wrap">
+    <div class="board" id="board"></div>
+  </div>
+
+  <div class="hint-line" id="hintline"></div>
+
+  <div class="result" id="result">
+    <div class="line" id="r-line"></div>
+    <div class="from" id="r-from"></div>
+    <div class="note" id="r-note"></div>
+    <div class="row2">
+      <button class="btn primary" id="r-next">再来一句</button>
+      <button class="btn ghost" id="r-share">分享</button>
+    </div>
+  </div>
+
+  <div class="tray">
+    <div class="pool-head">
+      <span>字 库 · <b id="pool-count">0</b></span>
+      <span id="pool-tip">点字入格，也可直接用输入法打字</span>
+    </div>
+    <div class="pool" id="pool"></div>
+    <div class="actions">
+      <button class="btn ghost" id="btn-hint">求助</button>
+      <button class="btn ghost" id="btn-del">删除</button>
+      <button class="btn primary" id="btn-enter">提交</button>
+    </div>
+  </div>
+</div>
+
+<input class="ime" id="ime" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="输入诗句">
+
+<div class="toast" id="toast"></div>
+
+<div class="mask" id="mask-help">
+  <div class="modal">
+    <h2>怎么玩</h2>
+    <p>猜一句五言或七言古诗（词）。五言 6 次机会，七言 7 次机会。</p>
+    <ul>
+      <li>每次提交一整句，字数必须与答案相同。</li>
+      <li>提交后每格变色，告诉你这个字的情况。</li>
+      <li>字库 30~36 字，里面藏着 3 句干扰诗句——能拼成好几句话，只有一句是答案。</li>
+    </ul>
+    <div class="demo">
+      <div class="tile correct">会</div><div class="tile">当</div><div class="tile">凌</div>
+      <span class="cap">绿：位置正确</span>
+    </div>
+    <div class="demo">
+      <div class="tile">会</div><div class="tile present">当</div><div class="tile">凌</div>
+      <span class="cap">黄：字在句中，位置不对</span>
+    </div>
+    <div class="demo">
+      <div class="tile">会</div><div class="tile">当</div><div class="tile absent">凌</div>
+      <span class="cap">灰：句中无此字</span>
+    </div>
+    <p style="margin-top:6px">题目 80% 出自初中课本（七上—九下），20% 出自课外名句。字可点选，也可用输入法直接打字。每天一句，也可随时开新题。</p>
+    <button class="btn primary" id="help-close" style="width:100%;margin-top:6px">开始</button>
+  </div>
+</div>
+
+<div class="mask" id="mask-stats">
+  <div class="modal">
+    <h2>战绩</h2>
+    <div class="stat-grid">
+      <div class="stat"><b id="s-played">0</b><span>总局数</span></div>
+      <div class="stat"><b id="s-rate">0%</b><span>胜率</span></div>
+      <div class="stat"><b id="s-streak">0</b><span>连续</span></div>
+      <div class="stat"><b id="s-max">0</b><span>最高连</span></div>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:8px;letter-spacing:.06em">猜中时用了几次</div>
+    <div class="dist" id="s-dist"></div>
+    <button class="btn primary" id="stats-close" style="width:100%;margin-top:14px">关闭</button>
+  </div>
+</div>
+
+<script>
+/* ===================== 数据 ===================== */
+const POEMS = [{"l":"杨花落尽子规啼","t":"闻王昌龄左迁龙标遥有此寄","a":"李白","d":"唐","s":"tb"},{"l":"我寄愁心与明月","t":"闻王昌龄左迁龙标遥有此寄","a":"李白","d":"唐","s":"tb"},{"l":"随君直到夜郎西","t":"闻王昌龄左迁龙标遥有此寄","a":"李白","d":"唐","s":"tb"},{"l":"潮平两岸阔","t":"次北固山下","a":"王湾","d":"唐","s":"tb"},{"l":"风正一帆悬","t":"次北固山下","a":"王湾","d":"唐","s":"tb"},{"l":"海日生残夜","t":"次北固山下","a":"王湾","d":"唐","s":"tb"},{"l":"江春入旧年","t":"次北固山下","a":"王湾","d":"唐","s":"tb"},{"l":"乡书何处达","t":"次北固山下","a":"王湾","d":"唐","s":"tb"},{"l":"归雁洛阳边","t":"次北固山下","a":"王湾","d":"唐","s":"tb"},{"l":"峨眉山月半轮秋","t":"峨眉山月歌","a":"李白","d":"唐","s":"tb"},{"l":"影入平羌江水流","t":"峨眉山月歌","a":"李白","d":"唐","s":"tb"},{"l":"夜发清溪向三峡","t":"峨眉山月歌","a":"李白","d":"唐","s":"tb"},{"l":"思君不见下渝州","t":"峨眉山月歌","a":"李白","d":"唐","s":"tb"},{"l":"岐王宅里寻常见","t":"江南逢李龟年","a":"杜甫","d":"唐","s":"tb"},{"l":"崔九堂前几度闻","t":"江南逢李龟年","a":"杜甫","d":"唐","s":"tb"},{"l":"正是江南好风景","t":"江南逢李龟年","a":"杜甫","d":"唐","s":"tb"},{"l":"落花时节又逢君","t":"江南逢李龟年","a":"杜甫","d":"唐","s":"tb"},{"l":"强欲登高去","t":"行军九日思长安故园","a":"岑参","d":"唐","s":"tb"},{"l":"无人送酒来","t":"行军九日思长安故园","a":"岑参","d":"唐","s":"tb"},{"l":"遥怜故园菊","t":"行军九日思长安故园","a":"岑参","d":"唐","s":"tb"},{"l":"应傍战场开","t":"行军九日思长安故园","a":"岑参","d":"唐","s":"tb"},{"l":"回乐烽前沙似雪","t":"夜上受降城闻笛","a":"李益","d":"唐","s":"tb"},{"l":"受降城外月如霜","t":"夜上受降城闻笛","a":"李益","d":"唐","s":"tb"},{"l":"不知何处吹芦管","t":"夜上受降城闻笛","a":"李益","d":"唐","s":"tb"},{"l":"一夜征人尽望乡","t":"夜上受降城闻笛","a":"李益","d":"唐","s":"tb"},{"l":"自古逢秋悲寂寥","t":"秋词","a":"刘禹锡","d":"唐","s":"tb"},{"l":"我言秋日胜春朝","t":"秋词","a":"刘禹锡","d":"唐","s":"tb"},{"l":"晴空一鹤排云上","t":"秋词","a":"刘禹锡","d":"唐","s":"tb"},{"l":"便引诗情到碧霄","t":"秋词","a":"刘禹锡","d":"唐","s":"tb"},{"l":"君问归期未有期","t":"夜雨寄北","a":"李商隐","d":"唐","s":"tb"},{"l":"巴山夜雨涨秋池","t":"夜雨寄北","a":"李商隐","d":"唐","s":"tb"},{"l":"何当共剪西窗烛","t":"夜雨寄北","a":"李商隐","d":"唐","s":"tb"},{"l":"却话巴山夜雨时","t":"夜雨寄北","a":"李商隐","d":"唐","s":"tb"},{"l":"僵卧孤村不自哀","t":"十一月四日风雨大作","a":"陆游","d":"宋","s":"tb"},{"l":"尚思为国戍轮台","t":"十一月四日风雨大作","a":"陆游","d":"宋","s":"tb"},{"l":"夜阑卧听风吹雨","t":"十一月四日风雨大作","a":"陆游","d":"宋","s":"tb"},{"l":"铁马冰河入梦来","t":"十一月四日风雨大作","a":"陆游","d":"宋","s":"tb"},{"l":"终古高云簇此城","t":"潼关","a":"谭嗣同","d":"清","s":"tb"},{"l":"秋风吹散马蹄声","t":"潼关","a":"谭嗣同","d":"清","s":"tb"},{"l":"河流大野犹嫌束","t":"潼关","a":"谭嗣同","d":"清","s":"tb"},{"l":"山入潼关不解平","t":"潼关","a":"谭嗣同","d":"清","s":"tb"},{"l":"独坐幽篁里","t":"竹里馆","a":"王维","d":"唐","s":"tb"},{"l":"弹琴复长啸","t":"竹里馆","a":"王维","d":"唐","s":"tb"},{"l":"深林人不知","t":"竹里馆","a":"王维","d":"唐","s":"tb"},{"l":"明月来相照","t":"竹里馆","a":"王维","d":"唐","s":"tb"},{"l":"谁家玉笛暗飞声","t":"春夜洛城闻笛","a":"李白","d":"唐","s":"tb"},{"l":"散入春风满洛城","t":"春夜洛城闻笛","a":"李白","d":"唐","s":"tb"},{"l":"此夜曲中闻折柳","t":"春夜洛城闻笛","a":"李白","d":"唐","s":"tb"},{"l":"何人不起故园情","t":"春夜洛城闻笛","a":"李白","d":"唐","s":"tb"},{"l":"故园东望路漫漫","t":"逢入京使","a":"岑参","d":"唐","s":"tb"},{"l":"双袖龙钟泪不干","t":"逢入京使","a":"岑参","d":"唐","s":"tb"},{"l":"马上相逢无纸笔","t":"逢入京使","a":"岑参","d":"唐","s":"tb"},{"l":"凭君传语报平安","t":"逢入京使","a":"岑参","d":"唐","s":"tb"},{"l":"草树知春不久归","t":"晚春","a":"韩愈","d":"唐","s":"tb"},{"l":"百般红紫斗芳菲","t":"晚春","a":"韩愈","d":"唐","s":"tb"},{"l":"杨花榆荚无才思","t":"晚春","a":"韩愈","d":"唐","s":"tb"},{"l":"惟解漫天作雪飞","t":"晚春","a":"韩愈","d":"唐","s":"tb"},{"l":"前不见古人","t":"登幽州台歌","a":"陈子昂","d":"唐","s":"tb"},{"l":"后不见来者","t":"登幽州台歌","a":"陈子昂","d":"唐","s":"tb"},{"l":"岱宗夫如何","t":"望岳","a":"杜甫","d":"唐","s":"tb"},{"l":"齐鲁青未了","t":"望岳","a":"杜甫","d":"唐","s":"tb"},{"l":"造化钟神秀","t":"望岳","a":"杜甫","d":"唐","s":"tb"},{"l":"阴阳割昏晓","t":"望岳","a":"杜甫","d":"唐","s":"tb"},{"l":"荡胸生曾云","t":"望岳","a":"杜甫","d":"唐","s":"tb"},{"l":"会当凌绝顶","t":"望岳","a":"杜甫","d":"唐","s":"tb"},{"l":"一览众山小","t":"望岳","a":"杜甫","d":"唐","s":"tb"},{"l":"飞来山上千寻塔","t":"登飞来峰","a":"王安石","d":"宋","s":"tb"},{"l":"闻说鸡鸣见日升","t":"登飞来峰","a":"王安石","d":"宋","s":"tb"},{"l":"不畏浮云遮望眼","t":"登飞来峰","a":"王安石","d":"宋","s":"tb"},{"l":"自缘身在最高层","t":"登飞来峰","a":"王安石","d":"宋","s":"tb"},{"l":"莫笑农家腊酒浑","t":"游山西村","a":"陆游","d":"宋","s":"tb"},{"l":"丰年留客足鸡豚","t":"游山西村","a":"陆游","d":"宋","s":"tb"},{"l":"山重水复疑无路","t":"游山西村","a":"陆游","d":"宋","s":"tb"},{"l":"柳暗花明又一村","t":"游山西村","a":"陆游","d":"宋","s":"tb"},{"l":"箫鼓追随春社近","t":"游山西村","a":"陆游","d":"宋","s":"tb"},{"l":"衣冠简朴古风存","t":"游山西村","a":"陆游","d":"宋","s":"tb"},{"l":"浩荡离愁白日斜","t":"己亥杂诗","a":"龚自珍","d":"清","s":"tb"},{"l":"吟鞭东指即天涯","t":"己亥杂诗","a":"龚自珍","d":"清","s":"tb"},{"l":"落红不是无情物","t":"己亥杂诗","a":"龚自珍","d":"清","s":"tb"},{"l":"化作春泥更护花","t":"己亥杂诗","a":"龚自珍","d":"清","s":"tb"},{"l":"烟笼寒水月笼沙","t":"泊秦淮","a":"杜牧","d":"唐","s":"tb"},{"l":"夜泊秦淮近酒家","t":"泊秦淮","a":"杜牧","d":"唐","s":"tb"},{"l":"商女不知亡国恨","t":"泊秦淮","a":"杜牧","d":"唐","s":"tb"},{"l":"隔江犹唱后庭花","t":"泊秦淮","a":"杜牧","d":"唐","s":"tb"},{"l":"宣室求贤访逐臣","t":"贾生","a":"李商隐","d":"唐","s":"tb"},{"l":"贾生才调更无伦","t":"贾生","a":"李商隐","d":"唐","s":"tb"},{"l":"可怜夜半虚前席","t":"贾生","a":"李商隐","d":"唐","s":"tb"},{"l":"不问苍生问鬼神","t":"贾生","a":"李商隐","d":"唐","s":"tb"},{"l":"莫言下岭便无难","t":"过松源晨炊漆公店","a":"杨万里","d":"宋","s":"tb"},{"l":"赚得行人错喜欢","t":"过松源晨炊漆公店","a":"杨万里","d":"宋","s":"tb"},{"l":"政入万山围子里","t":"过松源晨炊漆公店","a":"杨万里","d":"宋","s":"tb"},{"l":"一山放出一山拦","t":"过松源晨炊漆公店","a":"杨万里","d":"宋","s":"tb"},{"l":"黄梅时节家家雨","t":"约客","a":"赵师秀","d":"宋","s":"tb"},{"l":"青草池塘处处蛙","t":"约客","a":"赵师秀","d":"宋","s":"tb"},{"l":"有约不来过夜半","t":"约客","a":"赵师秀","d":"宋","s":"tb"},{"l":"闲敲棋子落灯花","t":"约客","a":"赵师秀","d":"宋","s":"tb"},{"l":"东皋薄暮望","t":"野望","a":"王绩","d":"唐","s":"tb"},{"l":"徙倚欲何依","t":"野望","a":"王绩","d":"唐","s":"tb"},{"l":"树树皆秋色","t":"野望","a":"王绩","d":"唐","s":"tb"},{"l":"山山唯落晖","t":"野望","a":"王绩","d":"唐","s":"tb"},{"l":"牧人驱犊返","t":"野望","a":"王绩","d":"唐","s":"tb"},{"l":"相顾无相识","t":"野望","a":"王绩","d":"唐","s":"tb"},{"l":"昔人已乘黄鹤去","t":"黄鹤楼","a":"崔颢","d":"唐","s":"tb"},{"l":"此地空余黄鹤楼","t":"黄鹤楼","a":"崔颢","d":"唐","s":"tb"},{"l":"白云千载空悠悠","t":"黄鹤楼","a":"崔颢","d":"唐","s":"tb"},{"l":"晴川历历汉阳树","t":"黄鹤楼","a":"崔颢","d":"唐","s":"tb"},{"l":"芳草萋萋鹦鹉洲","t":"黄鹤楼","a":"崔颢","d":"唐","s":"tb"},{"l":"日暮乡关何处是","t":"黄鹤楼","a":"崔颢","d":"唐","s":"tb"},{"l":"烟波江上使人愁","t":"黄鹤楼","a":"崔颢","d":"唐","s":"tb"},{"l":"单车欲问边","t":"使至塞上","a":"王维","d":"唐","s":"tb"},{"l":"征蓬出汉塞","t":"使至塞上","a":"王维","d":"唐","s":"tb"},{"l":"大漠孤烟直","t":"使至塞上","a":"王维","d":"唐","s":"tb"},{"l":"长河落日圆","t":"使至塞上","a":"王维","d":"唐","s":"tb"},{"l":"萧关逢候骑","t":"使至塞上","a":"王维","d":"唐","s":"tb"},{"l":"都护在燕然","t":"使至塞上","a":"王维","d":"唐","s":"tb"},{"l":"渡远荆门外","t":"渡荆门送别","a":"李白","d":"唐","s":"tb"},{"l":"山随平野尽","t":"渡荆门送别","a":"李白","d":"唐","s":"tb"},{"l":"江入大荒流","t":"渡荆门送别","a":"李白","d":"唐","s":"tb"},{"l":"月下飞天镜","t":"渡荆门送别","a":"李白","d":"唐","s":"tb"},{"l":"云生结海楼","t":"渡荆门送别","a":"李白","d":"唐","s":"tb"},{"l":"仍怜故乡水","t":"渡荆门送别","a":"李白","d":"唐","s":"tb"},{"l":"万里送行舟","t":"渡荆门送别","a":"李白","d":"唐","s":"tb"},{"l":"孤山寺北贾亭西","t":"钱塘湖春行","a":"白居易","d":"唐","s":"tb"},{"l":"水面初平云脚低","t":"钱塘湖春行","a":"白居易","d":"唐","s":"tb"},{"l":"几处早莺争暖树","t":"钱塘湖春行","a":"白居易","d":"唐","s":"tb"},{"l":"谁家新燕啄春泥","t":"钱塘湖春行","a":"白居易","d":"唐","s":"tb"},{"l":"乱花渐欲迷人眼","t":"钱塘湖春行","a":"白居易","d":"唐","s":"tb"},{"l":"浅草才能没马蹄","t":"钱塘湖春行","a":"白居易","d":"唐","s":"tb"},{"l":"最爱湖东行不足","t":"钱塘湖春行","a":"白居易","d":"唐","s":"tb"},{"l":"庭中有奇树","t":"庭中有奇树","a":"佚名","d":"汉","s":"tb"},{"l":"绿叶发华滋","t":"庭中有奇树","a":"佚名","d":"汉","s":"tb"},{"l":"攀条折其荣","t":"庭中有奇树","a":"佚名","d":"汉","s":"tb"},{"l":"馨香盈怀袖","t":"庭中有奇树","a":"佚名","d":"汉","s":"tb"},{"l":"路远莫致之","t":"庭中有奇树","a":"佚名","d":"汉","s":"tb"},{"l":"亭亭山上松","t":"赠从弟","a":"刘桢","d":"汉","s":"tb"},{"l":"瑟瑟谷中风","t":"赠从弟","a":"刘桢","d":"汉","s":"tb"},{"l":"风声一何盛","t":"赠从弟","a":"刘桢","d":"汉","s":"tb"},{"l":"松枝一何劲","t":"赠从弟","a":"刘桢","d":"汉","s":"tb"},{"l":"冰霜正惨凄","t":"赠从弟","a":"刘桢","d":"汉","s":"tb"},{"l":"岂不罹凝寒","t":"赠从弟","a":"刘桢","d":"汉","s":"tb"},{"l":"松柏有本性","t":"赠从弟","a":"刘桢","d":"汉","s":"tb"},{"l":"八方各异气","t":"梁甫行","a":"曹植","d":"三国","s":"tb"},{"l":"千里殊风雨","t":"梁甫行","a":"曹植","d":"三国","s":"tb"},{"l":"剧哉边海民","t":"梁甫行","a":"曹植","d":"三国","s":"tb"},{"l":"寄身于草野","t":"梁甫行","a":"曹植","d":"三国","s":"tb"},{"l":"妻子象禽兽","t":"梁甫行","a":"曹植","d":"三国","s":"tb"},{"l":"柴门何萧条","t":"梁甫行","a":"曹植","d":"三国","s":"tb"},{"l":"结庐在人境","t":"饮酒（其五）","a":"陶渊明","d":"东晋","s":"tb"},{"l":"而无车马喧","t":"饮酒（其五）","a":"陶渊明","d":"东晋","s":"tb"},{"l":"问君何能尔","t":"饮酒（其五）","a":"陶渊明","d":"东晋","s":"tb"},{"l":"心远地自偏","t":"饮酒（其五）","a":"陶渊明","d":"东晋","s":"tb"},{"l":"采菊东篱下","t":"饮酒（其五）","a":"陶渊明","d":"东晋","s":"tb"},{"l":"悠然见南山","t":"饮酒（其五）","a":"陶渊明","d":"东晋","s":"tb"},{"l":"山气日夕佳","t":"饮酒（其五）","a":"陶渊明","d":"东晋","s":"tb"},{"l":"此中有真意","t":"饮酒（其五）","a":"陶渊明","d":"东晋","s":"tb"},{"l":"欲辨已忘言","t":"饮酒（其五）","a":"陶渊明","d":"东晋","s":"tb"},{"l":"国破山河在","t":"春望","a":"杜甫","d":"唐","s":"tb"},{"l":"城春草木深","t":"春望","a":"杜甫","d":"唐","s":"tb"},{"l":"感时花溅泪","t":"春望","a":"杜甫","d":"唐","s":"tb"},{"l":"恨别鸟惊心","t":"春望","a":"杜甫","d":"唐","s":"tb"},{"l":"烽火连三月","t":"春望","a":"杜甫","d":"唐","s":"tb"},{"l":"家书抵万金","t":"春望","a":"杜甫","d":"唐","s":"tb"},{"l":"白头搔更短","t":"春望","a":"杜甫","d":"唐","s":"tb"},{"l":"黑云压城城欲摧","t":"雁门太守行","a":"李贺","d":"唐","s":"tb"},{"l":"甲光向日金鳞开","t":"雁门太守行","a":"李贺","d":"唐","s":"tb"},{"l":"角声满天秋色里","t":"雁门太守行","a":"李贺","d":"唐","s":"tb"},{"l":"塞上燕脂凝夜紫","t":"雁门太守行","a":"李贺","d":"唐","s":"tb"},{"l":"半卷红旗临易水","t":"雁门太守行","a":"李贺","d":"唐","s":"tb"},{"l":"报君黄金台上意","t":"雁门太守行","a":"李贺","d":"唐","s":"tb"},{"l":"提携玉龙为君死","t":"雁门太守行","a":"李贺","d":"唐","s":"tb"},{"l":"折戟沉沙铁未销","t":"赤壁","a":"杜牧","d":"唐","s":"tb"},{"l":"自将磨洗认前朝","t":"赤壁","a":"杜牧","d":"唐","s":"tb"},{"l":"东风不与周郎便","t":"赤壁","a":"杜牧","d":"唐","s":"tb"},{"l":"铜雀春深锁二乔","t":"赤壁","a":"杜牧","d":"唐","s":"tb"},{"l":"天接云涛连晓雾","t":"渔家傲（天接云涛连晓雾）","a":"李清照","d":"宋","s":"tb"},{"l":"星河欲转千帆舞","t":"渔家傲（天接云涛连晓雾）","a":"李清照","d":"宋","s":"tb"},{"l":"仿佛梦魂归帝所","t":"渔家傲（天接云涛连晓雾）","a":"李清照","d":"宋","s":"tb"},{"l":"我报路长嗟日暮","t":"渔家傲（天接云涛连晓雾）","a":"李清照","d":"宋","s":"tb"},{"l":"九万里风鹏正举","t":"渔家傲（天接云涛连晓雾）","a":"李清照","d":"宋","s":"tb"},{"l":"蓬舟吹取三山去","t":"渔家傲（天接云涛连晓雾）","a":"李清照","d":"宋","s":"tb"},{"l":"一曲新词酒一杯","t":"浣溪沙（一曲新词酒一杯）","a":"晏殊","d":"宋","s":"tb"},{"l":"去年天气旧亭台","t":"浣溪沙（一曲新词酒一杯）","a":"晏殊","d":"宋","s":"tb"},{"l":"夕阳西下几时回","t":"浣溪沙（一曲新词酒一杯）","a":"晏殊","d":"宋","s":"tb"},{"l":"无可奈何花落去","t":"浣溪沙（一曲新词酒一杯）","a":"晏殊","d":"宋","s":"tb"},{"l":"似曾相识燕归来","t":"浣溪沙（一曲新词酒一杯）","a":"晏殊","d":"宋","s":"tb"},{"l":"小园香径独徘徊","t":"浣溪沙（一曲新词酒一杯）","a":"晏殊","d":"宋","s":"tb"},{"l":"轻舟短棹西湖好","t":"采桑子（轻舟短棹西湖好）","a":"欧阳修","d":"宋","s":"tb"},{"l":"隐隐笙歌处处随","t":"采桑子（轻舟短棹西湖好）","a":"欧阳修","d":"宋","s":"tb"},{"l":"无风水面琉璃滑","t":"采桑子（轻舟短棹西湖好）","a":"欧阳修","d":"宋","s":"tb"},{"l":"惊起沙禽掠岸飞","t":"采桑子（轻舟短棹西湖好）","a":"欧阳修","d":"宋","s":"tb"},{"l":"暮投石壕村","t":"石壕吏","a":"杜甫","d":"唐","s":"tb"},{"l":"有吏夜捉人","t":"石壕吏","a":"杜甫","d":"唐","s":"tb"},{"l":"老翁逾墙走","t":"石壕吏","a":"杜甫","d":"唐","s":"tb"},{"l":"老妇出门看","t":"石壕吏","a":"杜甫","d":"唐","s":"tb"},{"l":"八月秋高风怒号","t":"茅屋为秋风所破歌","a":"杜甫","d":"唐","s":"tb"},{"l":"卷我屋上三重茅","t":"茅屋为秋风所破歌","a":"杜甫","d":"唐","s":"tb"},{"l":"唇焦口燥呼不得","t":"茅屋为秋风所破歌","a":"杜甫","d":"唐","s":"tb"},{"l":"归来倚杖自叹息","t":"茅屋为秋风所破歌","a":"杜甫","d":"唐","s":"tb"},{"l":"俄顷风定云墨色","t":"茅屋为秋风所破歌","a":"杜甫","d":"唐","s":"tb"},{"l":"秋天漠漠向昏黑","t":"茅屋为秋风所破歌","a":"杜甫","d":"唐","s":"tb"},{"l":"布衾多年冷似铁","t":"茅屋为秋风所破歌","a":"杜甫","d":"唐","s":"tb"},{"l":"床头屋漏无干处","t":"茅屋为秋风所破歌","a":"杜甫","d":"唐","s":"tb"},{"l":"雨脚如麻未断绝","t":"茅屋为秋风所破歌","a":"杜甫","d":"唐","s":"tb"},{"l":"长夜沾湿何由彻","t":"茅屋为秋风所破歌","a":"杜甫","d":"唐","s":"tb"},{"l":"安得广厦千万间","t":"茅屋为秋风所破歌","a":"杜甫","d":"唐","s":"tb"},{"l":"风雨不动安如山","t":"茅屋为秋风所破歌","a":"杜甫","d":"唐","s":"tb"},{"l":"伐薪烧炭南山中","t":"卖炭翁","a":"白居易","d":"唐","s":"tb"},{"l":"满面尘灰烟火色","t":"卖炭翁","a":"白居易","d":"唐","s":"tb"},{"l":"两鬓苍苍十指黑","t":"卖炭翁","a":"白居易","d":"唐","s":"tb"},{"l":"卖炭得钱何所营","t":"卖炭翁","a":"白居易","d":"唐","s":"tb"},{"l":"可怜身上衣正单","t":"卖炭翁","a":"白居易","d":"唐","s":"tb"},{"l":"心忧炭贱愿天寒","t":"卖炭翁","a":"白居易","d":"唐","s":"tb"},{"l":"夜来城外一尺雪","t":"卖炭翁","a":"白居易","d":"唐","s":"tb"},{"l":"牛困人饥日已高","t":"卖炭翁","a":"白居易","d":"唐","s":"tb"},{"l":"翩翩两骑来是谁","t":"卖炭翁","a":"白居易","d":"唐","s":"tb"},{"l":"手把文书口称敕","t":"卖炭翁","a":"白居易","d":"唐","s":"tb"},{"l":"半匹红纱一丈绫","t":"卖炭翁","a":"白居易","d":"唐","s":"tb"},{"l":"清晨入古寺","t":"题破山寺后禅院","a":"常建","d":"唐","s":"tb"},{"l":"初日照高林","t":"题破山寺后禅院","a":"常建","d":"唐","s":"tb"},{"l":"曲径通幽处","t":"题破山寺后禅院","a":"常建","d":"唐","s":"tb"},{"l":"禅房花木深","t":"题破山寺后禅院","a":"常建","d":"唐","s":"tb"},{"l":"山光悦鸟性","t":"题破山寺后禅院","a":"常建","d":"唐","s":"tb"},{"l":"潭影空人心","t":"题破山寺后禅院","a":"常建","d":"唐","s":"tb"},{"l":"万籁此都寂","t":"题破山寺后禅院","a":"常建","d":"唐","s":"tb"},{"l":"但余钟磬音","t":"题破山寺后禅院","a":"常建","d":"唐","s":"tb"},{"l":"青山横北郭","t":"送友人","a":"李白","d":"唐","s":"tb"},{"l":"白水绕东城","t":"送友人","a":"李白","d":"唐","s":"tb"},{"l":"此地一为别","t":"送友人","a":"李白","d":"唐","s":"tb"},{"l":"孤蓬万里征","t":"送友人","a":"李白","d":"唐","s":"tb"},{"l":"浮云游子意","t":"送友人","a":"李白","d":"唐","s":"tb"},{"l":"落日故人情","t":"送友人","a":"李白","d":"唐","s":"tb"},{"l":"挥手自兹去","t":"送友人","a":"李白","d":"唐","s":"tb"},{"l":"萧萧班马鸣","t":"送友人","a":"李白","d":"唐","s":"tb"},{"l":"缺月挂疏桐","t":"卜算子·黄州定慧院寓居作","a":"苏轼","d":"宋","s":"tb"},{"l":"漏断人初静","t":"卜算子·黄州定慧院寓居作","a":"苏轼","d":"宋","s":"tb"},{"l":"谁见幽人独往来","t":"卜算子·黄州定慧院寓居作","a":"苏轼","d":"宋","s":"tb"},{"l":"缥缈孤鸿影","t":"卜算子·黄州定慧院寓居作","a":"苏轼","d":"宋","s":"tb"},{"l":"拣尽寒枝不肯栖","t":"卜算子·黄州定慧院寓居作","a":"苏轼","d":"宋","s":"tb"},{"l":"寂寞沙洲冷","t":"卜算子·黄州定慧院寓居作","a":"苏轼","d":"宋","s":"tb"},{"l":"驿外断桥边","t":"卜算子·咏梅","a":"陆游","d":"宋","s":"tb"},{"l":"寂寞开无主","t":"卜算子·咏梅","a":"陆游","d":"宋","s":"tb"},{"l":"已是黄昏独自愁","t":"卜算子·咏梅","a":"陆游","d":"宋","s":"tb"},{"l":"更著风和雨","t":"卜算子·咏梅","a":"陆游","d":"宋","s":"tb"},{"l":"无意苦争春","t":"卜算子·咏梅","a":"陆游","d":"宋","s":"tb"},{"l":"一任群芳妒","t":"卜算子·咏梅","a":"陆游","d":"宋","s":"tb"},{"l":"零落成泥碾作尘","t":"卜算子·咏梅","a":"陆游","d":"宋","s":"tb"},{"l":"只有香如故","t":"卜算子·咏梅","a":"陆游","d":"宋","s":"tb"},{"l":"望长城内外","t":"沁园春·雪","a":"毛泽东","d":"近现代","s":"tb"},{"l":"欲与天公试比高","t":"沁园春·雪","a":"毛泽东","d":"近现代","s":"tb"},{"l":"看红装素裹","t":"沁园春·雪","a":"毛泽东","d":"近现代","s":"tb"},{"l":"惜秦皇汉武","t":"沁园春·雪","a":"毛泽东","d":"近现代","s":"tb"},{"l":"只识弯弓射大雕","t":"沁园春·雪","a":"毛泽东","d":"近现代","s":"tb"},{"l":"数风流人物","t":"沁园春·雪","a":"毛泽东","d":"近现代","s":"tb"},{"l":"明月几时有","t":"水调歌头（明月几时有）","a":"苏轼","d":"宋","s":"tb"},{"l":"把酒问青天","t":"水调歌头（明月几时有）","a":"苏轼","d":"宋","s":"tb"},{"l":"今夕是何年","t":"水调歌头（明月几时有）","a":"苏轼","d":"宋","s":"tb"},{"l":"高处不胜寒","t":"水调歌头（明月几时有）","a":"苏轼","d":"宋","s":"tb"},{"l":"起舞弄清影","t":"水调歌头（明月几时有）","a":"苏轼","d":"宋","s":"tb"},{"l":"何似在人间","t":"水调歌头（明月几时有）","a":"苏轼","d":"宋","s":"tb"},{"l":"何事长向别时圆","t":"水调歌头（明月几时有）","a":"苏轼","d":"宋","s":"tb"},{"l":"此事古难全","t":"水调歌头（明月几时有）","a":"苏轼","d":"宋","s":"tb"},{"l":"但愿人长久","t":"水调歌头（明月几时有）","a":"苏轼","d":"宋","s":"tb"},{"l":"千里共婵娟","t":"水调歌头（明月几时有）","a":"苏轼","d":"宋","s":"tb"},{"l":"巴山楚水凄凉地","t":"酬乐天扬州初逢席上见赠","a":"刘禹锡","d":"唐","s":"tb"},{"l":"怀旧空吟闻笛赋","t":"酬乐天扬州初逢席上见赠","a":"刘禹锡","d":"唐","s":"tb"},{"l":"沉舟侧畔千帆过","t":"酬乐天扬州初逢席上见赠","a":"刘禹锡","d":"唐","s":"tb"},{"l":"病树前头万木春","t":"酬乐天扬州初逢席上见赠","a":"刘禹锡","d":"唐","s":"tb"},{"l":"今日听君歌一曲","t":"酬乐天扬州初逢席上见赠","a":"刘禹锡","d":"唐","s":"tb"},{"l":"暂凭杯酒长精神","t":"酬乐天扬州初逢席上见赠","a":"刘禹锡","d":"唐","s":"tb"},{"l":"金樽清酒斗十千","t":"行路难（其一）","a":"李白","d":"唐","s":"tb"},{"l":"玉盘珍羞直万钱","t":"行路难（其一）","a":"李白","d":"唐","s":"tb"},{"l":"停杯投箸不能食","t":"行路难（其一）","a":"李白","d":"唐","s":"tb"},{"l":"拔剑四顾心茫然","t":"行路难（其一）","a":"李白","d":"唐","s":"tb"},{"l":"欲渡黄河冰塞川","t":"行路难（其一）","a":"李白","d":"唐","s":"tb"},{"l":"将登太行雪满山","t":"行路难（其一）","a":"李白","d":"唐","s":"tb"},{"l":"长风破浪会有时","t":"行路难（其一）","a":"李白","d":"唐","s":"tb"},{"l":"直挂云帆济沧海","t":"行路难（其一）","a":"李白","d":"唐","s":"tb"},{"l":"相见时难别亦难","t":"无题","a":"李商隐","d":"唐","s":"tb"},{"l":"东风无力百花残","t":"无题","a":"李商隐","d":"唐","s":"tb"},{"l":"春蚕到死丝方尽","t":"无题","a":"李商隐","d":"唐","s":"tb"},{"l":"蜡炬成灰泪始干","t":"无题","a":"李商隐","d":"唐","s":"tb"},{"l":"晓镜但愁云鬓改","t":"无题","a":"李商隐","d":"唐","s":"tb"},{"l":"青鸟殷勤为探看","t":"无题","a":"李商隐","d":"唐","s":"tb"},{"l":"一上高城万里愁","t":"咸阳城东楼","a":"许浑","d":"唐","s":"tb"},{"l":"溪云初起日沉阁","t":"咸阳城东楼","a":"许浑","d":"唐","s":"tb"},{"l":"山雨欲来风满楼","t":"咸阳城东楼","a":"许浑","d":"唐","s":"tb"},{"l":"鸟下绿芜秦苑夕","t":"咸阳城东楼","a":"许浑","d":"唐","s":"tb"},{"l":"蝉鸣黄叶汉宫秋","t":"咸阳城东楼","a":"许浑","d":"唐","s":"tb"},{"l":"故国东来渭水流","t":"咸阳城东楼","a":"许浑","d":"唐","s":"tb"},{"l":"少年不识愁滋味","t":"丑奴儿·书博山道中壁","a":"辛弃疾","d":"宋","s":"tb"},{"l":"为赋新词强说愁","t":"丑奴儿·书博山道中壁","a":"辛弃疾","d":"宋","s":"tb"},{"l":"而今识尽愁滋味","t":"丑奴儿·书博山道中壁","a":"辛弃疾","d":"宋","s":"tb"},{"l":"却道天凉好个秋","t":"丑奴儿·书博山道中壁","a":"辛弃疾","d":"宋","s":"tb"},{"l":"塞下秋来风景异","t":"渔家傲·秋思","a":"范仲淹","d":"宋","s":"tb"},{"l":"衡阳雁去无留意","t":"渔家傲·秋思","a":"范仲淹","d":"宋","s":"tb"},{"l":"四面边声连角起","t":"渔家傲·秋思","a":"范仲淹","d":"宋","s":"tb"},{"l":"长烟落日孤城闭","t":"渔家傲·秋思","a":"范仲淹","d":"宋","s":"tb"},{"l":"浊酒一杯家万里","t":"渔家傲·秋思","a":"范仲淹","d":"宋","s":"tb"},{"l":"燕然未勒归无计","t":"渔家傲·秋思","a":"范仲淹","d":"宋","s":"tb"},{"l":"羌管悠悠霜满地","t":"渔家傲·秋思","a":"范仲淹","d":"宋","s":"tb"},{"l":"将军白发征夫泪","t":"渔家傲·秋思","a":"范仲淹","d":"宋","s":"tb"},{"l":"老夫聊发少年狂","t":"江城子·密州出猎","a":"苏轼","d":"宋","s":"tb"},{"l":"千骑卷平冈","t":"江城子·密州出猎","a":"苏轼","d":"宋","s":"tb"},{"l":"为报倾城随太守","t":"江城子·密州出猎","a":"苏轼","d":"宋","s":"tb"},{"l":"酒酣胸胆尚开张","t":"江城子·密州出猎","a":"苏轼","d":"宋","s":"tb"},{"l":"何日遣冯唐","t":"江城子·密州出猎","a":"苏轼","d":"宋","s":"tb"},{"l":"会挽雕弓如满月","t":"江城子·密州出猎","a":"苏轼","d":"宋","s":"tb"},{"l":"八百里分麾下炙","t":"破阵子·为陈同甫赋壮词以寄之","a":"辛弃疾","d":"宋","s":"tb"},{"l":"五十弦翻塞外声","t":"破阵子·为陈同甫赋壮词以寄之","a":"辛弃疾","d":"宋","s":"tb"},{"l":"沙场秋点兵","t":"破阵子·为陈同甫赋壮词以寄之","a":"辛弃疾","d":"宋","s":"tb"},{"l":"了却君王天下事","t":"破阵子·为陈同甫赋壮词以寄之","a":"辛弃疾","d":"宋","s":"tb"},{"l":"赢得生前身后名","t":"破阵子·为陈同甫赋壮词以寄之","a":"辛弃疾","d":"宋","s":"tb"},{"l":"可怜白发生","t":"破阵子·为陈同甫赋壮词以寄之","a":"辛弃疾","d":"宋","s":"tb"},{"l":"为篱下黄花开遍","t":"满江红·小住京华","a":"秋瑾","d":"清","s":"tb"},{"l":"四面歌残终破楚","t":"满江红·小住京华","a":"秋瑾","d":"清","s":"tb"},{"l":"八年风味徒思浙","t":"满江红·小住京华","a":"秋瑾","d":"清","s":"tb"},{"l":"强派作蛾眉","t":"满江红·小住京华","a":"秋瑾","d":"清","s":"tb"},{"l":"算平生肝胆","t":"满江红·小住京华","a":"秋瑾","d":"清","s":"tb"},{"l":"俗子胸襟谁识我","t":"满江红·小住京华","a":"秋瑾","d":"清","s":"tb"},{"l":"英雄末路当磨折","t":"满江红·小住京华","a":"秋瑾","d":"清","s":"tb"},{"l":"何处觅知音","t":"满江红·小住京华","a":"秋瑾","d":"清","s":"tb"},{"l":"莫听穿林打叶声","t":"定风波（莫听穿林打叶声）","a":"苏轼","d":"宋","s":"tb"},{"l":"何妨吟啸且徐行","t":"定风波（莫听穿林打叶声）","a":"苏轼","d":"宋","s":"tb"},{"l":"竹杖芒鞋轻胜马","t":"定风波（莫听穿林打叶声）","a":"苏轼","d":"宋","s":"tb"},{"l":"一蓑烟雨任平生","t":"定风波（莫听穿林打叶声）","a":"苏轼","d":"宋","s":"tb"},{"l":"料峭春风吹酒醒","t":"定风波（莫听穿林打叶声）","a":"苏轼","d":"宋","s":"tb"},{"l":"山头斜照却相迎","t":"定风波（莫听穿林打叶声）","a":"苏轼","d":"宋","s":"tb"},{"l":"回首向来萧瑟处","t":"定风波（莫听穿林打叶声）","a":"苏轼","d":"宋","s":"tb"},{"l":"也无风雨也无晴","t":"定风波（莫听穿林打叶声）","a":"苏轼","d":"宋","s":"tb"},{"l":"忆昔午桥桥上饮","t":"临江仙·夜登小阁忆洛中旧游","a":"陈与义","d":"宋","s":"tb"},{"l":"长沟流月去无声","t":"临江仙·夜登小阁忆洛中旧游","a":"陈与义","d":"宋","s":"tb"},{"l":"杏花疏影里","t":"临江仙·夜登小阁忆洛中旧游","a":"陈与义","d":"宋","s":"tb"},{"l":"吹笛到天明","t":"临江仙·夜登小阁忆洛中旧游","a":"陈与义","d":"宋","s":"tb"},{"l":"二十余年如一梦","t":"临江仙·夜登小阁忆洛中旧游","a":"陈与义","d":"宋","s":"tb"},{"l":"闲登小阁看新晴","t":"临江仙·夜登小阁忆洛中旧游","a":"陈与义","d":"宋","s":"tb"},{"l":"古今多少事","t":"临江仙·夜登小阁忆洛中旧游","a":"陈与义","d":"宋","s":"tb"},{"l":"渔唱起三更","t":"临江仙·夜登小阁忆洛中旧游","a":"陈与义","d":"宋","s":"tb"},{"l":"一轮秋影转金波","t":"太常引·建康中秋夜为吕叔潜赋","a":"辛弃疾","d":"宋","s":"tb"},{"l":"飞镜又重磨","t":"太常引·建康中秋夜为吕叔潜赋","a":"辛弃疾","d":"宋","s":"tb"},{"l":"把酒问姮娥","t":"太常引·建康中秋夜为吕叔潜赋","a":"辛弃疾","d":"宋","s":"tb"},{"l":"直下看山河","t":"太常引·建康中秋夜为吕叔潜赋","a":"辛弃疾","d":"宋","s":"tb"},{"l":"斫去桂婆娑","t":"太常引·建康中秋夜为吕叔潜赋","a":"辛弃疾","d":"宋","s":"tb"},{"l":"身向云山那畔行","t":"浣溪沙·身向云山那畔行","a":"纳兰性德","d":"清","s":"tb"},{"l":"北风吹断马嘶声","t":"浣溪沙·身向云山那畔行","a":"纳兰性德","d":"清","s":"tb"},{"l":"深秋远塞若为情","t":"浣溪沙·身向云山那畔行","a":"纳兰性德","d":"清","s":"tb"},{"l":"一抹晚烟荒戍垒","t":"浣溪沙·身向云山那畔行","a":"纳兰性德","d":"清","s":"tb"},{"l":"半竿斜日旧关城","t":"浣溪沙·身向云山那畔行","a":"纳兰性德","d":"清","s":"tb"},{"l":"古今幽恨几时平","t":"浣溪沙·身向云山那畔行","a":"纳兰性德","d":"清","s":"tb"},{"l":"北风卷地白草折","t":"白雪歌送武判官归京","a":"岑参","d":"唐","s":"tb"},{"l":"胡天八月即飞雪","t":"白雪歌送武判官归京","a":"岑参","d":"唐","s":"tb"},{"l":"忽如一夜春风来","t":"白雪歌送武判官归京","a":"岑参","d":"唐","s":"tb"},{"l":"千树万树梨花开","t":"白雪歌送武判官归京","a":"岑参","d":"唐","s":"tb"},{"l":"散入珠帘湿罗幕","t":"白雪歌送武判官归京","a":"岑参","d":"唐","s":"tb"},{"l":"狐裘不暖锦衾薄","t":"白雪歌送武判官归京","a":"岑参","d":"唐","s":"tb"},{"l":"瀚海阑干百丈冰","t":"白雪歌送武判官归京","a":"岑参","d":"唐","s":"tb"},{"l":"愁云惨淡万里凝","t":"白雪歌送武判官归京","a":"岑参","d":"唐","s":"tb"},{"l":"风掣红旗冻不翻","t":"白雪歌送武判官归京","a":"岑参","d":"唐","s":"tb"},{"l":"去时雪满天山路","t":"白雪歌送武判官归京","a":"岑参","d":"唐","s":"tb"},{"l":"山回路转不见君","t":"白雪歌送武判官归京","a":"岑参","d":"唐","s":"tb"},{"l":"雪上空留马行处","t":"白雪歌送武判官归京","a":"岑参","d":"唐","s":"tb"},{"l":"何处望神州","t":"南乡子·登京口北固亭有怀","a":"辛弃疾","d":"宋","s":"tb"},{"l":"满眼风光北固楼","t":"南乡子·登京口北固亭有怀","a":"辛弃疾","d":"宋","s":"tb"},{"l":"千古兴亡多少事","t":"南乡子·登京口北固亭有怀","a":"辛弃疾","d":"宋","s":"tb"},{"l":"不尽长江滚滚流","t":"南乡子·登京口北固亭有怀","a":"辛弃疾","d":"宋","s":"tb"},{"l":"年少万兜鍪","t":"南乡子·登京口北固亭有怀","a":"辛弃疾","d":"宋","s":"tb"},{"l":"坐断东南战未休","t":"南乡子·登京口北固亭有怀","a":"辛弃疾","d":"宋","s":"tb"},{"l":"天下英雄谁敌手","t":"南乡子·登京口北固亭有怀","a":"辛弃疾","d":"宋","s":"tb"},{"l":"生子当如孙仲谋","t":"南乡子·登京口北固亭有怀","a":"辛弃疾","d":"宋","s":"tb"},{"l":"辛苦遭逢起一经","t":"过零丁洋","a":"文天祥","d":"宋","s":"tb"},{"l":"干戈寥落四周星","t":"过零丁洋","a":"文天祥","d":"宋","s":"tb"},{"l":"山河破碎风飘絮","t":"过零丁洋","a":"文天祥","d":"宋","s":"tb"},{"l":"身世浮沉雨打萍","t":"过零丁洋","a":"文天祥","d":"宋","s":"tb"},{"l":"惶恐滩头说惶恐","t":"过零丁洋","a":"文天祥","d":"宋","s":"tb"},{"l":"零丁洋里叹零丁","t":"过零丁洋","a":"文天祥","d":"宋","s":"tb"},{"l":"人生自古谁无死","t":"过零丁洋","a":"文天祥","d":"宋","s":"tb"},{"l":"留取丹心照汗青","t":"过零丁洋","a":"文天祥","d":"宋","s":"tb"},{"l":"山河表里潼关路","t":"山坡羊·潼关怀古","a":"张养浩","d":"元","s":"tb"},{"l":"伤心秦汉经行处","t":"山坡羊·潼关怀古","a":"张养浩","d":"元","s":"tb"},{"l":"三年羁旅客","t":"别云间","a":"夏完淳","d":"明","s":"tb"},{"l":"今日又南冠","t":"别云间","a":"夏完淳","d":"明","s":"tb"},{"l":"无限山河泪","t":"别云间","a":"夏完淳","d":"明","s":"tb"},{"l":"谁言天地宽","t":"别云间","a":"夏完淳","d":"明","s":"tb"},{"l":"已知泉路近","t":"别云间","a":"夏完淳","d":"明","s":"tb"},{"l":"毅魄归来日","t":"别云间","a":"夏完淳","d":"明","s":"tb"},{"l":"灵旗空际看","t":"别云间","a":"夏完淳","d":"明","s":"tb"},{"l":"床前明月光","t":"静夜思","a":"李白","d":"唐","s":"ex"},{"l":"低头思故乡","t":"静夜思","a":"李白","d":"唐","s":"ex"},{"l":"春眠不觉晓","t":"春晓","a":"孟浩然","d":"唐","s":"ex"},{"l":"夜来风雨声","t":"春晓","a":"孟浩然","d":"唐","s":"ex"},{"l":"欲穷千里目","t":"登鹳雀楼","a":"王之涣","d":"唐","s":"ex"},{"l":"更上一层楼","t":"登鹳雀楼","a":"王之涣","d":"唐","s":"ex"},{"l":"千山鸟飞绝","t":"江雪","a":"柳宗元","d":"唐","s":"ex"},{"l":"独钓寒江雪","t":"江雪","a":"柳宗元","d":"唐","s":"ex"},{"l":"锄禾日当午","t":"悯农","a":"李绅","d":"唐","s":"ex"},{"l":"粒粒皆辛苦","t":"悯农","a":"李绅","d":"唐","s":"ex"},{"l":"红豆生南国","t":"相思","a":"王维","d":"唐","s":"ex"},{"l":"此物最相思","t":"相思","a":"王维","d":"唐","s":"ex"},{"l":"松下问童子","t":"寻隐者不遇","a":"贾岛","d":"唐","s":"ex"},{"l":"云深不知处","t":"寻隐者不遇","a":"贾岛","d":"唐","s":"ex"},{"l":"咬定青山不放松","t":"竹石","a":"郑燮","d":"清","s":"ex"},{"l":"任尔东西南北风","t":"竹石","a":"郑燮","d":"清","s":"ex"},{"l":"千锤万凿出深山","t":"石灰吟","a":"于谦","d":"明","s":"ex"},{"l":"要留清白在人间","t":"石灰吟","a":"于谦","d":"明","s":"ex"},{"l":"不要人夸好颜色","t":"墨梅","a":"王冕","d":"元","s":"ex"},{"l":"只留清气满乾坤","t":"墨梅","a":"王冕","d":"元","s":"ex"},{"l":"横看成岭侧成峰","t":"题西林壁","a":"苏轼","d":"宋","s":"ex"},{"l":"只缘身在此山中","t":"题西林壁","a":"苏轼","d":"宋","s":"ex"},{"l":"欲把西湖比西子","t":"饮湖上初晴后雨","a":"苏轼","d":"宋","s":"ex"},{"l":"淡妆浓抹总相宜","t":"饮湖上初晴后雨","a":"苏轼","d":"宋","s":"ex"},{"l":"飞流直下三千尺","t":"望庐山瀑布","a":"李白","d":"唐","s":"ex"},{"l":"疑是银河落九天","t":"望庐山瀑布","a":"李白","d":"唐","s":"ex"},{"l":"朝辞白帝彩云间","t":"早发白帝城","a":"李白","d":"唐","s":"ex"},{"l":"轻舟已过万重山","t":"早发白帝城","a":"李白","d":"唐","s":"ex"},{"l":"故人西辞黄鹤楼","t":"黄鹤楼送孟浩然之广陵","a":"李白","d":"唐","s":"ex"},{"l":"唯见长江天际流","t":"黄鹤楼送孟浩然之广陵","a":"李白","d":"唐","s":"ex"},{"l":"劝君更尽一杯酒","t":"送元二使安西","a":"王维","d":"唐","s":"ex"},{"l":"西出阳关无故人","t":"送元二使安西","a":"王维","d":"唐","s":"ex"},{"l":"独在异乡为异客","t":"九月九日忆山东兄弟","a":"王维","d":"唐","s":"ex"},{"l":"每逢佳节倍思亲","t":"九月九日忆山东兄弟","a":"王维","d":"唐","s":"ex"},{"l":"春风又绿江南岸","t":"泊船瓜洲","a":"王安石","d":"宋","s":"ex"},{"l":"明月何时照我还","t":"泊船瓜洲","a":"王安石","d":"宋","s":"ex"},{"l":"慈母手中线","t":"游子吟","a":"孟郊","d":"唐","s":"ex"},{"l":"报得三春晖","t":"游子吟","a":"孟郊","d":"唐","s":"ex"},{"l":"旧时王谢堂前燕","t":"乌衣巷","a":"刘禹锡","d":"唐","s":"ex"},{"l":"飞入寻常百姓家","t":"乌衣巷","a":"刘禹锡","d":"唐","s":"ex"},{"l":"爆竹声中一岁除","t":"元日","a":"王安石","d":"宋","s":"ex"},{"l":"总把新桃换旧符","t":"元日","a":"王安石","d":"宋","s":"ex"},{"l":"清明时节雨纷纷","t":"清明","a":"杜牧","d":"唐","s":"ex"},{"l":"牧童遥指杏花村","t":"清明","a":"杜牧","d":"唐","s":"ex"},{"l":"停车坐爱枫林晚","t":"山行","a":"杜牧","d":"唐","s":"ex"},{"l":"霜叶红于二月花","t":"山行","a":"杜牧","d":"唐","s":"ex"},{"l":"月落乌啼霜满天","t":"枫桥夜泊","a":"张继","d":"唐","s":"ex"},{"l":"夜半钟声到客船","t":"枫桥夜泊","a":"张继","d":"唐","s":"ex"},{"l":"葡萄美酒夜光杯","t":"凉州词","a":"王翰","d":"唐","s":"ex"},{"l":"古来征战几人回","t":"凉州词","a":"王翰","d":"唐","s":"ex"},{"l":"秦时明月汉时关","t":"出塞","a":"王昌龄","d":"唐","s":"ex"},{"l":"不教胡马度阴山","t":"出塞","a":"王昌龄","d":"唐","s":"ex"},{"l":"洛阳亲友如相问","t":"芙蓉楼送辛渐","a":"王昌龄","d":"唐","s":"ex"},{"l":"一片冰心在玉壶","t":"芙蓉楼送辛渐","a":"王昌龄","d":"唐","s":"ex"},{"l":"桃花潭水深千尺","t":"赠汪伦","a":"李白","d":"唐","s":"ex"},{"l":"不及汪伦送我情","t":"赠汪伦","a":"李白","d":"唐","s":"ex"},{"l":"好雨知时节","t":"春夜喜雨","a":"杜甫","d":"唐","s":"ex"},{"l":"润物细无声","t":"春夜喜雨","a":"杜甫","d":"唐","s":"ex"},{"l":"空山新雨后","t":"山居秋暝","a":"王维","d":"唐","s":"ex"},{"l":"清泉石上流","t":"山居秋暝","a":"王维","d":"唐","s":"ex"},{"l":"碧玉妆成一树高","t":"咏柳","a":"贺知章","d":"唐","s":"ex"},{"l":"二月春风似剪刀","t":"咏柳","a":"贺知章","d":"唐","s":"ex"},{"l":"少小离家老大回","t":"回乡偶书","a":"贺知章","d":"唐","s":"ex"},{"l":"笑问客从何处来","t":"回乡偶书","a":"贺知章","d":"唐","s":"ex"},{"l":"独怜幽草涧边生","t":"滁州西涧","a":"韦应物","d":"唐","s":"ex"},{"l":"野渡无人舟自横","t":"滁州西涧","a":"韦应物","d":"唐","s":"ex"},{"l":"生当作人杰","t":"夏日绝句","a":"李清照","d":"宋","s":"ex"},{"l":"不肯过江东","t":"夏日绝句","a":"李清照","d":"宋","s":"ex"},{"l":"死去元知万事空","t":"示儿","a":"陆游","d":"宋","s":"ex"},{"l":"家祭无忘告乃翁","t":"示儿","a":"陆游","d":"宋","s":"ex"},{"l":"山外青山楼外楼","t":"题临安邸","a":"林升","d":"宋","s":"ex"},{"l":"直把杭州作汴州","t":"题临安邸","a":"林升","d":"宋","s":"ex"},{"l":"草长莺飞二月天","t":"村居","a":"高鼎","d":"清","s":"ex"},{"l":"忙趁东风放纸鸢","t":"村居","a":"高鼎","d":"清","s":"ex"},{"l":"少壮不努力","t":"长歌行","a":"佚名","d":"汉","s":"ex"},{"l":"老大徒伤悲","t":"长歌行","a":"佚名","d":"汉","s":"ex"},{"l":"春花秋月何时了","t":"虞美人（春花秋月何时了）","a":"李煜","d":"五代","s":"ex"},{"l":"问君能有几多愁","t":"虞美人（春花秋月何时了）","a":"李煜","d":"五代","s":"ex"},{"l":"金风玉露一相逢","t":"鹊桥仙（纤云弄巧）","a":"秦观","d":"宋","s":"ex"},{"l":"两情若是久长时","t":"鹊桥仙（纤云弄巧）","a":"秦观","d":"宋","s":"ex"},{"l":"天生我材必有用","t":"将进酒","a":"李白","d":"唐","s":"ex"},{"l":"千金散尽还复来","t":"将进酒","a":"李白","d":"唐","s":"ex"},{"l":"春江潮水连海平","t":"春江花月夜","a":"张若虚","d":"唐","s":"ex"},{"l":"海上明月共潮生","t":"春江花月夜","a":"张若虚","d":"唐","s":"ex"},{"l":"同是天涯沦落人","t":"琵琶行","a":"白居易","d":"唐","s":"ex"},{"l":"大珠小珠落玉盘","t":"琵琶行","a":"白居易","d":"唐","s":"ex"},{"l":"东风夜放花千树","t":"青玉案·元夕","a":"辛弃疾","d":"宋","s":"ex"},{"l":"众里寻他千百度","t":"青玉案·元夕","a":"辛弃疾","d":"宋","s":"ex"},{"l":"谁道人生无再少","t":"浣溪沙（游蕲水清泉寺）","a":"苏轼","d":"宋","s":"ex"},{"l":"门前流水尚能西","t":"浣溪沙（游蕲水清泉寺）","a":"苏轼","d":"宋","s":"ex"}];
+const PINYIN = {"一":"yī","丁":"dīng","万":"wàn","丈":"zhàng","三":"sān","上":"shàng","下":"xià","不":"bù","与":"yǔ","且":"qiě","世":"shì","东":"dōng","丝":"sī","两":"liǎng","个":"gè","中":"zhōng","丰":"fēng","临":"lín","丹":"dān","为":"wèi","主":"zhǔ","举":"jǔ","乃":"nǎi","久":"jiǔ","之":"zhī","乌":"wū","乐":"lè","乔":"qiáo","乘":"chéng","九":"jiǔ","也":"yě","乡":"xiāng","书":"shū","乱":"luàn","乾":"qián","了":"le","争":"zhēng","事":"shì","二":"èr","于":"yú","云":"yún","五":"wǔ","亡":"wáng","亦":"yì","亭":"tíng","亲":"qīn","人":"rén","今":"jīn","仍":"réng","从":"cóng","他":"tā","仲":"zhòng","任":"rèn","仿":"fǎng","伐":"fá","休":"xiū","众":"zhòng","会":"huì","传":"chuán","伤":"shāng","伦":"lún","似":"shì","但":"dàn","低":"dī","何":"hé","余":"yú","佛":"fú","作":"zuò","佳":"jiā","使":"shǐ","依":"yī","侧":"cè","便":"biàn","俄":"é","俗":"sú","倍":"bèi","候":"hòu","倚":"yǐ","倾":"qīng","偏":"piān","停":"tíng","傍":"bàng","僵":"jiāng","元":"yuán","光":"guāng","兜":"dōu","入":"rù","全":"quán","八":"bā","公":"gōng","共":"gòng","关":"guān","兴":"xīng","兵":"bīng","其":"qí","兹":"zī","兽":"shòu","内":"nèi","冈":"gāng","再":"zài","军":"jūn","农":"nóng","冠":"guān","冯":"féng","冰":"bīng","冷":"lěng","冻":"dòng","凄":"qī","凉":"liáng","凌":"líng","凝":"níng","几":"jǐ","凭":"píng","出":"chū","凿":"záo","刀":"dāo","分":"fēn","初":"chū","别":"bié","到":"dào","前":"qián","剑":"jiàn","剧":"jù","剪":"jiǎn","割":"gē","力":"lì","劝":"quàn","动":"dòng","努":"nǔ","劲":"jìn","勒":"lēi","勤":"qín","化":"huà","北":"běi","匹":"pǐ","十":"shí","千":"qiān","升":"shēng","午":"wǔ","半":"bàn","华":"huá","单":"dān","卖":"mài","南":"nán","卧":"wò","即":"jí","却":"què","卷":"juǎn","历":"lì","压":"yā","厦":"shà","去":"qù","又":"yòu","及":"jí","友":"yǒu","双":"shuāng","发":"fā","取":"qǔ","受":"shòu","口":"kǒu","古":"gǔ","只":"zhǐ","可":"kě","台":"tái","叶":"yè","号":"hào","叹":"tàn","各":"gè","同":"tóng","名":"míng","后":"hòu","吏":"lì","向":"xiàng","君":"jūn","吟":"yín","听":"tīng","吹":"chuī","告":"gào","周":"zhōu","味":"wèi","呼":"hū","和":"hé","咬":"yǎo","哀":"āi","哉":"zāi","唇":"chún","唐":"táng","唯":"wéi","唱":"chàng","啄":"zhuó","商":"shāng","啸":"xiào","啼":"tí","喜":"xǐ","喧":"xuān","嗟":"jiē","嘶":"sī","四":"sì","回":"huí","园":"yuán","困":"kùn","围":"wéi","固":"gù","国":"guó","圆":"yuán","在":"zài","地":"dì","场":"chǎng","坐":"zuò","坤":"kūn","垒":"lěi","城":"chéng","堂":"táng","塔":"tǎ","塘":"táng","塞":"sāi","境":"jìng","墙":"qiáng","墨":"mò","壕":"háo","壮":"zhuàng","声":"shēng","壶":"hú","处":"chù","复":"fù","夕":"xī","外":"wài","多":"duō","夜":"yè","大":"dà","天":"tiān","太":"tài","夫":"fū","头":"tóu","夸":"kuā","奇":"qí","奈":"nài","女":"nǚ","好":"hǎo","如":"rú","妆":"zhuāng","妇":"fù","妒":"dù","妨":"fáng","妻":"qī","始":"shǐ","姓":"xìng","姮":"héng","娑":"suō","娟":"juān","娥":"é","婆":"pó","婵":"chán","嫌":"xián","子":"zi","存":"cún","孙":"sūn","孤":"gū","宅":"zhái","守":"shǒu","安":"ān","宗":"zōng","定":"dìng","宜":"yí","客":"kè","宣":"xuān","室":"shì","宫":"gōng","家":"jiā","宽":"kuān","寂":"jì","寄":"jì","寒":"hán","寞":"mò","寥":"liáo","寺":"sì","寻":"xún","射":"shè","将":"jiāng","小":"xiǎo","少":"shǎo","尔":"ěr","尘":"chén","尚":"shàng","尺":"chǐ","尽":"jǐn","层":"céng","屋":"wū","山":"shān","岁":"suì","岂":"qǐ","岐":"qí","岭":"lǐng","岱":"dài","岸":"àn","峡":"xiá","峨":"é","峭":"qiào","峰":"fēng","崔":"cuī","川":"chuān","州":"zhōu","已":"yǐ","巴":"bā","布":"bù","帆":"fān","帘":"lián","帝":"dì","席":"xí","常":"cháng","幕":"mù","干":"gàn","平":"píng","年":"nián","幽":"yōu","广":"guǎng","床":"chuáng","庐":"lú","应":"yīng","度":"dù","庭":"tíng","开":"kāi","异":"yì","弄":"nòng","弓":"gōng","引":"yǐn","张":"zhāng","弦":"xián","弯":"wān","弹":"dàn","强":"qiáng","归":"guī","当":"dāng","彩":"cǎi","影":"yǐng","彻":"chè","往":"wǎng","征":"zhēng","径":"jìng","徊":"huái","徐":"xú","徒":"tú","得":"dé","徘":"pái","徙":"xǐ","心":"xīn","必":"bì","忆":"yì","忘":"wàng","忙":"máng","忧":"yōu","忽":"hū","怀":"huái","怒":"nù","怜":"lián","思":"sī","性":"xìng","总":"zǒng","恐":"kǒng","恨":"hèn","息":"xī","悠":"yōu","悦":"yuè","悬":"xuán","悲":"bēi","情":"qíng","惊":"jīng","惜":"xī","惟":"wéi","惨":"cǎn","惶":"huáng","愁":"chóu","意":"yì","感":"gǎn","愿":"yuàn","慈":"cí","戈":"gē","戍":"shù","成":"chéng","我":"wǒ","战":"zhàn","戟":"jǐ","房":"fáng","所":"suǒ","手":"shǒu","才":"cái","打":"dǎ","把":"bǎ","投":"tóu","折":"zhé","护":"hù","报":"bào","抵":"dǐ","抹":"mǒ","拔":"bá","拣":"jiǎn","拦":"lán","挂":"guà","指":"zhǐ","挥":"huī","挽":"wǎn","捉":"zhuō","换":"huàn","排":"pái","掠":"lüè","探":"tàn","掣":"chè","接":"jiē","提":"tí","搔":"sāo","携":"xié","摧":"cuī","攀":"pān","改":"gǎi","放":"fàng","政":"zhèng","故":"gù","敌":"dí","敕":"chì","教":"jiào","散":"sàn","数":"shù","敲":"qiāo","文":"wén","斗":"dòu","料":"liào","斜":"xié","斫":"zhuó","断":"duàn","新":"xīn","方":"fāng","旅":"lǚ","旗":"qí","无":"wú","日":"rì","旧":"jiù","早":"zǎo","时":"shí","明":"míng","昏":"hūn","易":"yì","昔":"xī","星":"xīng","春":"chūn","是":"shì","晓":"xiǎo","晖":"huī","晚":"wǎn","晨":"chén","景":"jǐng","晴":"qíng","暂":"zàn","暖":"nuǎn","暗":"àn","暮":"mù","曲":"qū","更":"gèng","曾":"céng","最":"zuì","月":"yuè","有":"yǒu","望":"wàng","朝":"cháo","期":"qī","木":"mù","未":"wèi","末":"mò","本":"běn","朴":"pǔ","杏":"xìng","材":"cái","村":"cūn","杖":"zhàng","束":"shù","条":"tiáo","来":"lái","杨":"yáng","杭":"háng","杯":"bēi","杰":"jié","松":"sōng","林":"lín","枝":"zhī","枫":"fēng","柏":"bǎi","柳":"liǔ","柴":"chái","树":"shù","栖":"qī","桂":"guì","桃":"táo","桐":"tóng","桥":"qiáo","梅":"méi","梦":"mèng","梨":"lí","棋":"qí","棹":"zhào","楚":"chǔ","楼":"lóu","榆":"yú","横":"héng","樽":"zūn","欢":"huān","欲":"yù","歌":"gē","正":"zhèng","此":"cǐ","武":"wǔ","死":"sǐ","殊":"shū","残":"cán","殷":"yīn","毅":"yì","母":"mǔ","每":"měi","比":"bǐ","民":"mín","气":"qì","水":"shuǐ","求":"qiú","汉":"hàn","汗":"hàn","江":"jiāng","池":"chí","汪":"wāng","汴":"biàn","沉":"chén","沙":"shā","沟":"gōu","没":"méi","沦":"lún","沧":"cāng","河":"hé","沾":"zhān","泉":"quán","泊":"pō","波":"bō","泥":"ní","泪":"lèi","洋":"yáng","洗":"xǐ","洛":"luò","洲":"zhōu","派":"pài","流":"liú","浅":"qiǎn","浊":"zhuó","济":"jì","浑":"hún","浓":"nóng","浙":"zhè","浩":"hào","浪":"làng","浮":"fú","海":"hǎi","涛":"tāo","润":"rùn","涧":"jiàn","涨":"zhǎng","涯":"yá","淡":"dàn","淮":"huái","深":"shēn","清":"qīng","渐":"jiàn","渔":"yú","渝":"yú","渡":"dù","渭":"wèi","游":"yóu","湖":"hú","湿":"shī","溅":"jiàn","溪":"xī","滋":"zī","滑":"huá","滚":"gǔn","满":"mǎn","滩":"tān","漏":"lòu","漠":"mò","漫":"màn","潭":"tán","潮":"cháo","潼":"tóng","瀚":"hàn","火":"huǒ","灯":"dēng","灰":"huī","灵":"líng","炙":"zhì","炬":"jù","炭":"tàn","点":"diǎn","烛":"zhú","烟":"yān","烧":"shāo","烽":"fēng","焦":"jiāo","然":"rán","照":"zhào","燕":"yàn","燥":"zào","爆":"bào","爱":"ài","片":"piàn","牛":"niú","牧":"mù","物":"wù","犊":"dú","犹":"yóu","狂":"kuáng","狐":"hú","独":"dú","玉":"yù","王":"wáng","珍":"zhēn","珠":"zhū","班":"bān","琉":"liú","琴":"qín","瑟":"sè","璃":"lí","生":"shēng","用":"yòng","由":"yóu","甲":"jiǎ","畏":"wèi","畔":"pàn","留":"liú","疏":"shū","疑":"yí","病":"bìng","登":"dēng","白":"bái","百":"bǎi","皆":"jiē","皇":"huáng","皋":"gāo","盈":"yíng","盘":"pán","盛":"shèng","目":"mù","直":"zhí","相":"xiāng","眉":"méi","看":"kàn","真":"zhēn","眠":"mián","眼":"yǎn","知":"zhī","短":"duǎn","石":"shí","破":"pò","碎":"suì","碧":"bì","碾":"niǎn","磨":"mó","磬":"qìng","社":"shè","神":"shén","祭":"jì","禅":"chán","离":"lí","禽":"qín","禾":"hé","秀":"xiù","秋":"qiū","秦":"qín","称":"chēng","穷":"qióng","空":"kōng","穿":"chuān","窗":"chuāng","童":"tóng","竹":"zhú","竿":"gān","笑":"xiào","笔":"bǐ","笙":"shēng","笛":"dí","符":"fú","笼":"lóng","简":"jiǎn","算":"suàn","管":"guǎn","箫":"xiāo","箸":"zhù","篁":"huáng","篱":"lí","簇":"cù","籁":"lài","粒":"lì","精":"jīng","素":"sù","紫":"zǐ","絮":"xù","红":"hóng","约":"yuē","纱":"shā","纷":"fēn","纸":"zhǐ","线":"xiàn","细":"xì","终":"zhōng","经":"jīng","结":"jié","绕":"rào","绝":"jué","绫":"líng","绿":"lǜ","缈":"miǎo","缘":"yuán","缥":"piāo","缺":"quē","罗":"luó","罹":"lí","羁":"jī","羌":"qiāng","美":"měi","羞":"xiū","群":"qún","翁":"wēng","翩":"piān","翻":"fān","老":"lǎo","者":"zhě","而":"ér","聊":"liáo","肝":"gān","肯":"kěn","胆":"dǎn","胜":"shèng","胡":"hú","胸":"xiōng","能":"néng","脂":"zhī","脚":"jiǎo","腊":"là","臣":"chén","自":"zì","致":"zhì","舞":"wǔ","舟":"zhōu","般":"bān","船":"chuán","色":"sè","节":"jié","芒":"máng","芜":"wú","芦":"lú","花":"huā","芳":"fāng","苍":"cāng","苑":"yuàn","若":"ruò","苦":"kǔ","英":"yīng","茅":"máo","茫":"máng","荆":"jīng","草":"cǎo","荒":"huāng","荚":"jiá","荡":"dàng","荣":"róng","莫":"mò","莺":"yīng","菊":"jú","菲":"fēi","萄":"táo","萋":"qī","萍":"píng","营":"yíng","萧":"xiāo","落":"luò","著":"zhù","葡":"pú","蓑":"suō","蓬":"péng","薄":"báo","薪":"xīn","虚":"xū","蚕":"cán","蛙":"wā","蛾":"é","蜡":"là","蝉":"chán","行":"xíng","衡":"héng","衣":"yī","表":"biǎo","衾":"qīn","袖":"xiù","装":"zhuāng","裘":"qiú","裹":"guǒ","襟":"jīn","西":"xī","要":"yào","见":"jiàn","规":"guī","觅":"mì","览":"lǎn","觉":"jué","角":"jiǎo","解":"jiě","言":"yán","计":"jì","认":"rèn","访":"fǎng","识":"shí","词":"cí","试":"shì","诗":"shī","话":"huà","语":"yǔ","说":"shuō","谁":"shuí","调":"diào","谋":"móu","谢":"xiè","谷":"gǔ","豆":"dòu","豚":"tún","象":"xiàng","贤":"xián","贱":"jiàn","贾":"jiǎ","赋":"fù","赚":"zhuàn","赢":"yíng","走":"zǒu","起":"qǐ","趁":"chèn","足":"zú","路":"lù","蹄":"tí","身":"shēn","车":"chē","转":"zhuǎn","轮":"lún","轻":"qīng","载":"zài","辛":"xīn","辞":"cí","辨":"biàn","边":"biān","达":"dá","过":"guò","迎":"yíng","近":"jìn","返":"fǎn","还":"hái","远":"yuǎn","连":"lián","迷":"mí","追":"zhuī","送":"sòng","逐":"zhú","通":"tōng","造":"zào","逢":"féng","逾":"yú","遍":"biàn","道":"dào","遣":"qiǎn","遥":"yáo","遭":"zāo","遮":"zhē","那":"nà","郎":"láng","郭":"guō","都":"dōu","酒":"jiǔ","酣":"hān","醒":"xǐng","采":"cǎi","里":"lǐ","重":"zhòng","野":"yě","金":"jīn","鍪":"móu","钓":"diào","钟":"zhōng","钱":"qián","铁":"tiě","铜":"tóng","银":"yín","销":"xiāo","锁":"suǒ","锄":"chú","错":"cuò","锤":"chuí","锦":"jǐn","镜":"jìng","长":"zhǎng","门":"mén","闭":"bì","问":"wèn","闲":"xián","间":"jiān","闻":"wén","阁":"gé","阑":"lán","阔":"kuò","阳":"yáng","阴":"yīn","际":"jì","降":"jiàng","限":"xiàn","除":"chú","随":"suí","隐":"yǐn","隔":"gé","难":"nán","雀":"què","雁":"yàn","雄":"xióng","雕":"diāo","雨":"yǔ","雪":"xuě","零":"líng","雾":"wù","霄":"xiāo","霜":"shuāng","露":"lù","青":"qīng","静":"jìng","面":"miàn","鞋":"xié","鞭":"biān","音":"yīn","顶":"dǐng","顷":"qǐng","顾":"gù","颜":"yán","风":"fēng","飘":"piāo","飞":"fēi","食":"shí","饥":"jī","饮":"yǐn","首":"shǒu","香":"xiāng","馨":"xīn","马":"mǎ","驱":"qū","驿":"yì","骑":"qí","高":"gāo","鬓":"bìn","鬼":"guǐ","魂":"hún","魄":"pò","鲁":"lǔ","鳞":"lín","鸟":"niǎo","鸡":"jī","鸢":"yuān","鸣":"míng","鸿":"hóng","鹉":"wǔ","鹏":"péng","鹤":"hè","鹦":"yīng","麻":"má","麾":"huī","黄":"huáng","黑":"hēi","鼓":"gǔ","齐":"qí","龙":"lóng"};
+
+const TB = POEMS.filter(p => p.s === "tb");
+const EX = POEMS.filter(p => p.s === "ex");
+const EXTRA_RATE = 0.2;
+
+/* 题库字频，用于补足字库 */
+const FREQ = (() => {
+  const m = new Map();
+  for (const p of POEMS) for (const c of p.l) m.set(c, (m.get(c) || 0) + 1);
+  return [...m.entries()].sort((a, b) => b[1] - a[1]).map(e => e[0]);
+})();
+
+/* ===================== 工具 ===================== */
+const $ = id => document.getElementById(id);
+const HAN = /[\u4e00-\u9fff]/;
+
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function hashStr(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+function todayKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function dayIndex() {
+  return Math.floor(Date.now() / 86400000);
+}
+
+/* 按 80/20 权重抽题 */
+function pickPoem(rand) {
+  const pool = rand() < EXTRA_RATE ? EX : TB;
+  return pool[Math.floor(rand() * pool.length) % pool.length];
+}
+
+/* 判定：标准 Wordle 双遍算法（正确处理重复字） */
+function judge(guess, answer) {
+  const n = answer.length;
+  const res = new Array(n).fill("absent");
+  const left = new Map();
+  for (let i = 0; i < n; i++) if (guess[i] !== answer[i]) left.set(answer[i], (left.get(answer[i]) || 0) + 1);
+  for (let i = 0; i < n; i++) if (guess[i] === answer[i]) res[i] = "correct";
+  for (let i = 0; i < n; i++) {
+    if (res[i] === "correct") continue;
+    const c = guess[i], k = left.get(c) || 0;
+    if (k > 0) { res[i] = "present"; left.set(c, k - 1); }
+  }
+  return res;
+}
+
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("poem-wordle:" + k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("poem-wordle:" + k, JSON.stringify(v)); } catch {} }
+};
+
+/* ===================== 状态 ===================== */
+const MAX = { 5: 6, 7: 7 };
+let state = {
+  poem: null,
+  answer: "",
+  len: 7,
+  tries: 0,
+  maxTries: 7,
+  guesses: [],      // [{word, marks}]
+  cur: [],
+  done: false,
+  win: false,
+  mode: "daily",    // daily | practice
+  hintUsed: 0,
+  pool: []
+};
+
+/* ===================== 渲染 ===================== */
+const boardEl = $("board");
+const poolEl = $("pool");
+
+/* 字池：答案字 + 3 句"干扰诗句"的全部用字 + 高频字补足。
+   干扰句优先与答案共享字、且含 1 句同诗句子，使池中同时存在多句可拼成的诗。 */
+function buildPool(poem) {
+  const len = poem.l.length;
+  const target = len === 5 ? 30 : 36;
+  const rnd = mulberry32(hashStr(poem.l + "#pool"));
+  const set = new Set(poem.l.split(""));
+
+  const rank = p => {
+    const share = [...new Set(p.l)].filter(c => poem.l.includes(c)).length;
+    const samePoem = p.t === poem.t ? 3 : 0;
+    const sameLen = p.l.length === len ? 2 : 0;
+    return share * 2 + samePoem + sameLen + rnd() * 3;
+  };
+  const ranked = POEMS.filter(p => p.l !== poem.l)
+    .map(p => ({ p, s: rank(p) }))
+    .sort((a, b) => b.s - a.s);
+
+  // 固定选 3 句干扰：最多 1 句同诗，其余他诗
+  let samePoemUsed = 0, decoys = 0;
+  for (const { p } of ranked) {
+    if (decoys >= 3) break;
+    if (p.t === poem.t) {
+      if (samePoemUsed >= 1) continue;
+      samePoemUsed++;
+    }
+    for (const c of p.l) set.add(c);
+    decoys++;
+  }
+  for (const c of FREQ) {
+    if (set.size >= target) break;
+    set.add(c);
+  }
+  return [...set].sort((a, b) => {
+    const pa = PINYIN[a] || "", pb = PINYIN[b] || "";
+    return pa.localeCompare(pb, "en") || a.localeCompare(b);
+  });
+}
+
+function renderBoard() {
+  boardEl.style.setProperty("--cols", state.len);
+  boardEl.style.setProperty("--rows", state.maxTries);
+  boardEl.innerHTML = "";
+  for (let r = 0; r < state.maxTries; r++) {
+    const row = document.createElement("div");
+    row.className = "row";
+    const g = state.guesses[r];
+    for (let c = 0; c < state.len; c++) {
+      const t = document.createElement("div");
+      t.className = "tile";
+      if (g) {
+        t.textContent = g.word[c];
+        t.classList.add(g.marks[c]);
+      } else if (r === state.guesses.length && !state.done) {
+        if (state.cur[c]) { t.textContent = state.cur[c]; t.classList.add("filled"); }
+        else if (c === state.cur.length) t.classList.add("cursor");
+      }
+      row.appendChild(t);
+    }
+    boardEl.appendChild(row);
+  }
+}
+
+function renderMeta() {
+  const kind = state.len === 5 ? "五言" : "七言";
+  const src = state.poem.s === "tb" ? "课内" : "课外";
+  const left = state.maxTries - state.tries;
+  let html = `<span class="tag">${kind}</span><span class="tag">${src}</span>`;
+  if (!state.done) html += `<span class="tag">剩 ${left} 次</span>`;
+  else html += `<span class="tag hot">${state.win ? "已猜中" : "已揭晓"}</span>`;
+  html += `<a class="tag" href="gaokao.html" title="高中版 · 高考必背 60 篇">高中版 →</a>`;
+  $("meta").innerHTML = html;
+}
+
+function keyStateMap() {
+  const m = new Map();
+  const rank = { absent: 1, present: 2, correct: 3 };
+  for (const g of state.guesses) {
+    for (let i = 0; i < g.word.length; i++) {
+      const c = g.word[i], s = g.marks[i];
+      if (!m.has(c) || rank[s] > rank[m.get(c)]) m.set(c, s);
+    }
+  }
+  return m;
+}
+
+function renderPool() {
+  const ks = keyStateMap();
+  poolEl.innerHTML = "";
+  for (const c of state.pool) {
+    const b = document.createElement("button");
+    b.className = "key";
+    if (ks.has(c)) b.classList.add(ks.get(c));
+    b.innerHTML = `${c}<span class="py">${PINYIN[c] || ""}</span>`;
+    b.addEventListener("mousedown", e => e.preventDefault());
+    b.addEventListener("click", () => typeChar(c));
+    poolEl.appendChild(b);
+  }
+  poolEl.style.setProperty("--pool-cols", state.pool.length % 10 === 0 ? 10 : 9);
+  $("pool-count").textContent = state.pool.length;
+}
+
+function syncBoardWidth() {
+  const w = boardEl.getBoundingClientRect().width;
+  if (w > 0) document.documentElement.style.setProperty("--board-w", w + "px");
+}
+
+function renderAll() {
+  renderBoard();
+  syncBoardWidth();
+  renderMeta();
+  renderPool();
+  $("btn-enter").disabled = state.done;
+  $("btn-hint").disabled = state.done || state.hintUsed >= 2;
+}
+
+/* ===================== 交互 ===================== */
+const ime = $("ime");
+let busy = false;
+
+function toast(msg) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => t.classList.remove("show"), 1600);
+}
+
+function focusIME() {
+  ime.value = "";
+  ime.focus({ preventScroll: true });
+}
+
+function typeChar(ch) {
+  if (state.done || busy) return;
+  if (state.cur.length >= state.len) { toast("已填满，点提交或删除"); return; }
+  state.cur.push(ch);
+  renderBoard();
+  renderPool();
+}
+
+function delChar() {
+  if (state.done || busy) return;
+  state.cur.pop();
+  renderBoard();
+  renderPool();
+}
+
+function submit() {
+  if (state.done || busy) return;
+  if (state.cur.length < state.len) {
+    const row = boardEl.children[state.guesses.length];
+    if (row) { row.classList.add("shake"); setTimeout(() => row.classList.remove("shake"), 420); }
+    toast(`还差 ${state.len - state.cur.length} 个字`);
+    return;
+  }
+  const word = state.cur.join("");
+  if (state.guesses.some(g => g.word === word)) {
+    toast("这句猜过了");
+    return;
+  }
+  const marks = judge(word, state.answer);
+  state.guesses.push({ word, marks });
+  state.cur = [];
+  state.tries++;
+
+  busy = true;
+  renderBoard();
+  animateRow(state.guesses.length - 1);
+  renderMeta();
+  setTimeout(() => {
+    busy = false;
+    const win = word === state.answer;
+    if (win || state.tries >= state.maxTries) {
+      finish(win);
+    } else {
+      renderPool();
+      focusIME();
+    }
+  }, 400 + state.len * 90);
+}
+
+function animateRow(idx) {
+  const row = boardEl.children[idx];
+  if (!row) return;
+  [...row.children].forEach((t, i) => {
+    t.style.animationDelay = (i * 0.09) + "s";
+    t.classList.add("flip");
+  });
+}
+
+function finish(win) {
+  state.done = true;
+  state.win = win;
+  saveProgress();
+  recordStats(win, state.tries);
+  renderAll();
+  const r = $("result");
+  $("r-line").textContent = state.answer;
+  $("r-from").textContent = `《${state.poem.t}》 · ${state.poem.d} · ${state.poem.a}`;
+  $("r-note").innerHTML = win
+    ? `用了 <b>${state.tries}</b> 次猜中`
+    : `正确答案如上，${state.mode === "daily" ? "明天再来" : "再来一局试试"}`;
+  r.classList.add("show");
+  document.querySelector(".tray").classList.add("tray-hidden");
+}
+
+/* ===================== 进度 ===================== */
+function saveProgress() {
+  if (state.mode !== "daily") return;
+  store.set("daily", {
+    date: todayKey(),
+    line: state.answer,
+    guesses: state.guesses,
+    done: state.done,
+    win: state.win,
+    hintUsed: state.hintUsed
+  });
+}
+
+function recordStats(win, tries) {
+  const s = store.get("stats", { played: 0, wins: 0, streak: 0, max: 0, dist: [0,0,0,0,0,0,0,0] });
+  s.played++;
+  if (win) {
+    s.wins++;
+    s.streak++;
+    s.max = Math.max(s.max, s.streak);
+    s.dist[tries] = (s.dist[tries] || 0) + 1;
+  } else {
+    s.streak = 0;
+  }
+  store.set("stats", s);
+}
+
+/* ===================== 开局 ===================== */
+function start(poem, mode, saved) {
+  state.poem = poem;
+  state.answer = poem.l;
+  state.len = poem.l.length;
+  state.maxTries = MAX[state.len] || 7;
+  state.mode = mode;
+  state.guesses = saved?.guesses || [];
+  state.tries = state.guesses.length;
+  state.cur = [];
+  state.done = !!saved?.done;
+  state.win = !!saved?.win;
+  state.hintUsed = saved?.hintUsed || 0;
+  state.pool = buildPool(poem);
+
+  $("result").classList.remove("show");
+  document.querySelector(".tray").classList.remove("tray-hidden");
+  $("hintline").innerHTML = "";
+  renderAll();
+
+  if (state.done) {
+    const r = $("result");
+    $("r-line").textContent = state.answer;
+    $("r-from").textContent = `《${state.poem.t}》 · ${state.poem.d} · ${state.poem.a}`;
+    $("r-note").innerHTML = state.win ? `用了 <b>${state.tries}</b> 次猜中` : "正确答案如上";
+    r.classList.add("show");
+    document.querySelector(".tray").classList.add("tray-hidden");
+  } else {
+    focusIME();
+  }
+}
+
+function startDaily() {
+  const saved = store.get("daily", null);
+  const today = todayKey();
+  const rand = mulberry32(hashStr(today));
+  const poem = pickPoem(rand);
+  if (saved && saved.date === today && saved.line === poem.l) {
+    start(poem, "daily", saved);
+  } else {
+    start(poem, "daily", null);
+  }
+}
+
+function startPractice() {
+  const seed = Date.now() ^ Math.floor(Math.random() * 1e9);
+  const rand = mulberry32(seed >>> 0);
+  let poem = pickPoem(rand);
+  // 避免连续抽到同一句
+  if (state.poem && poem.l === state.answer) poem = pickPoem(rand);
+  start(poem, "practice", null);
+}
+
+/* ===================== 分享 ===================== */
+function shareText() {
+  const emoji = { correct: "🟩", present: "🟨", absent: "⬛" };
+  const grid = state.guesses.map(g => g.marks.map(m => emoji[m]).join("")).join("\n");
+  const head = state.mode === "daily"
+    ? `诗句 Wordle ${todayKey()}`
+    : `诗句 Wordle · 练习`;
+  return `${head}  ${state.win ? state.tries : "X"}/${state.maxTries}\n${grid}\n《${state.poem.t}》${state.poem.a}`;
+}
+
+async function doShare() {
+  const text = shareText();
+  try {
+    await navigator.clipboard.writeText(text);
+    toast("已复制到剪贴板");
+  } catch {
+    const ta = document.createElement("textarea");
+    ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); toast("已复制到剪贴板"); }
+    catch { toast("复制失败，请手动选择"); }
+    ta.remove();
+  }
+}
+
+/* ===================== 统计面板 ===================== */
+function renderStats() {
+  const s = store.get("stats", { played: 0, wins: 0, streak: 0, max: 0, dist: [0,0,0,0,0,0,0,0] });
+  $("s-played").textContent = s.played;
+  $("s-rate").textContent = s.played ? Math.round(s.wins / s.played * 100) + "%" : "0%";
+  $("s-streak").textContent = s.streak;
+  $("s-max").textContent = s.max;
+  const maxV = Math.max(1, ...s.dist);
+  $("s-dist").innerHTML = s.dist.map((v, i) => {
+    if (i === 0) return "";
+    const w = Math.round(v / maxV * 100);
+    return `<div><em>${i}</em><div class="bar"><i class="${v ? "" : "zero"}" style="width:${v ? Math.max(w, 8) : 100}%"></i></div><span style="width:18px;text-align:right">${v}</span></div>`;
+  }).join("");
+}
+
+/* ===================== 事件绑定 ===================== */
+ime.addEventListener("input", () => {
+  const v = ime.value;
+  ime.value = "";
+  for (const ch of v) {
+    if (HAN.test(ch)) typeChar(ch);
+  }
+});
+ime.addEventListener("keydown", e => {
+  if (e.key === "Enter") { e.preventDefault(); submit(); }
+  else if (e.key === "Backspace") { e.preventDefault(); delChar(); }
+  else if (e.key === "Escape") { closeModals(); }
+});
+ime.addEventListener("blur", () => {
+  if (!matchMedia("(pointer:fine)").matches) return;   // 移动端不抢软键盘
+  setTimeout(() => {
+    if (!state.done && !document.querySelector(".mask.show")) focusIME();
+  }, 80);
+});
+
+/* 按钮不抢输入框焦点 */
+document.querySelectorAll(".btn").forEach(b => {
+  b.addEventListener("mousedown", e => e.preventDefault());
+});
+
+document.addEventListener("keydown", e => {
+  if (e.target === ime) return;
+  if (document.querySelector(".mask.show")) {
+    if (e.key === "Escape") closeModals();
+    return;
+  }
+  if (e.key === "Enter") { e.preventDefault(); submit(); }
+  else if (e.key === "Backspace") { e.preventDefault(); delChar(); }
+  else if (e.key.length === 1 && HAN.test(e.key)) { typeChar(e.key); }
+});
+
+boardEl.addEventListener("click", focusIME);
+$("btn-enter").addEventListener("click", submit);
+$("btn-del").addEventListener("click", delChar);
+
+$("btn-hint").addEventListener("click", () => {
+  if (state.done) return;
+  state.hintUsed++;
+  const p = state.poem;
+  if (state.hintUsed === 1) {
+    $("hintline").innerHTML = `提示：<b>${p.d} · ${p.a}</b>`;
+  } else {
+    $("hintline").innerHTML = `提示：<b>《${p.t}》 · ${p.d} · ${p.a}</b>`;
+  }
+  saveProgress();
+  renderAll();
+});
+
+$("r-next").addEventListener("click", () => {
+  startPractice();
+  focusIME();
+});
+$("r-share").addEventListener("click", doShare);
+
+$("btn-help").addEventListener("click", () => $("mask-help").classList.add("show"));
+$("help-close").addEventListener("click", () => { $("mask-help").classList.remove("show"); focusIME(); });
+$("btn-stats").addEventListener("click", () => { renderStats(); $("mask-stats").classList.add("show"); });
+$("stats-close").addEventListener("click", () => { $("mask-stats").classList.remove("show"); focusIME(); });
+
+document.querySelectorAll(".mask").forEach(m => {
+  m.addEventListener("click", e => { if (e.target === m) closeModals(); });
+});
+function closeModals() {
+  document.querySelectorAll(".mask").forEach(m => m.classList.remove("show"));
+  focusIME();
+}
+
+/* 主题 */
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  store.set("theme", t);
+}
+$("btn-theme").addEventListener("click", () => {
+  applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+});
+(function initTheme() {
+  const saved = store.get("theme", null);
+  if (saved) applyTheme(saved);
+  else applyTheme(matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+})();
+
+window.addEventListener("resize", () => { syncBoardWidth(); });
+
+/* 启动 */
+startDaily();
+if (matchMedia("(pointer:fine)").matches) focusIME();
+</script>
+</body>
+</html>
