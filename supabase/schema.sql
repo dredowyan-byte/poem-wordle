@@ -31,5 +31,11 @@ create policy "anon can post messages"
     and char_length(body) between 1 and 200
   );
 
+-- 表级授权：Supabase 新项目不会自动把新建表的权限给 anon，
+-- 少了这三行会报 permission denied for table messages
+grant usage on schema public to anon, authenticated;
+grant select, insert on public.messages to anon, authenticated;
+grant usage, select on all sequences in schema public to anon, authenticated;
+
 -- 没有 update / delete 策略，所以前端拿到 anon key 也删不掉别人的留言。
 -- 删留言：控制台 → Table Editor → messages → 勾选行 → Delete。

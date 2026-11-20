@@ -79,19 +79,21 @@ cd ../gaokao && python build.py  # 输出 ../gaokao.html
 
 1. 注册 https://supabase.com ，新建 project（区域选 Singapore / Tokyo，国内访问相对快）
 2. 左侧 SQL Editor → New query → 粘贴 `supabase/schema.sql` 全文 → Run
-3. Project Settings → API，复制 `Project URL` 和 `anon public` key
+3. Project Settings → API Keys，复制 `Project URL` 和公钥——新版控制台叫 **Publishable key**（`sb_publishable_...`），旧版叫 **anon public**（`eyJ...` 开头的 JWT），两个都能用
 4. 把这两个值填进 `junior/template.html` 和 `gaokao/template.html`：
 
 ```js
 const GUEST = {
   url: "https://xxxxxxxx.supabase.co",
-  key: "eyJhbGciOiJIUzI1NiIsInR5cCI6..."
+  key: "sb_publishable_xxxxxxxx"
 };
 ```
 
 5. 重新 build 并推送
 
-`anon` key 是公开密钥，设计上就放在前端，安全性由 RLS 保证：`schema.sql` 只开放了 `select` 和 `insert`，前端拿不到改和删的能力。删留言去 Supabase 的 Table Editor。
+`anon` / publishable key 是公开密钥，设计上就放在前端，安全性由 RLS 保证：`schema.sql` 只开放了 `select` 和 `insert`，前端拿不到改和删的能力。删留言去 Supabase 的 Table Editor。
+
+`schema.sql` 末尾那三条 `grant` 别删：Supabase 新项目默认不把新建表的权限给 `anon`，少了它会报 `permission denied for table messages`，表现是留言一直「加载失败」。
 
 防刷手段：昵称 20 字 / 正文 200 字上限（数据库 CHECK 约束兜底）、表单蜜罐字段、同一浏览器 30 秒内只能发一条。
 
