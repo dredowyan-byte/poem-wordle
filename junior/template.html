@@ -71,7 +71,7 @@
   .board{
     --gap:7px;
     display:grid; gap:var(--gap); margin:0 auto;
-    width:min(100%, 420px, max(210px, calc((100dvh - 436px - (var(--rows,6) - 1) * 7px) / var(--rows,6) * var(--cols,7) + (var(--cols,7) - 1) * 7px)));
+    width:min(100%, 420px, max(280px, calc((100dvh - 436px - (var(--rows,6) - 1) * 7px) / var(--rows,6) * var(--cols,7) + (var(--cols,7) - 1) * 7px)));
   }
   .row{display:grid; gap:7px; grid-template-columns:repeat(var(--cols,7),1fr)}
   .tile{
@@ -112,10 +112,10 @@
   /* ---------- pool / keys ---------- */
   .tray{margin-top:auto; padding-top:8px}
   .tray.tray-hidden{display:none}
-  .pool-head{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:11px;color:var(--muted);padding:0 2px 7px;letter-spacing:.08em;overflow:hidden;white-space:nowrap;max-width:var(--board-w,420px);margin:0 auto}
+  .pool-head{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:11px;color:var(--muted);padding:0 2px 7px;letter-spacing:.08em;overflow:hidden;white-space:nowrap;max-width:min(100%,max(var(--board-w,420px),300px));margin:0 auto}
   #pool-tip{text-overflow:ellipsis;overflow:hidden}
   .pool-head b{font-weight:500;color:color-mix(in srgb,var(--ink) 70%,transparent)}
-  .pool{display:grid;grid-template-columns:repeat(var(--pool-cols,9),1fr);gap:5px;max-width:var(--board-w,420px);margin:0 auto}
+  .pool{display:grid;grid-template-columns:repeat(var(--pool-cols,10),1fr);gap:5px;max-width:min(100%,max(var(--board-w,420px),300px));margin:0 auto}
   .key{
     position:relative; height:44px; border-radius:8px; border:1px solid var(--line);
     background:var(--panel); color:var(--ink); font-family:var(--tile-font); font-size:18px;
@@ -132,7 +132,7 @@
   .key.absent{background:var(--absent);color:var(--muted);border-color:var(--absent)}
   .key.absent .py{color:transparent}
   .key:disabled{opacity:.42;cursor:default}
-  .actions{display:flex;gap:8px;margin-top:8px;max-width:var(--board-w,420px);margin-left:auto;margin-right:auto}
+  .actions{display:flex;gap:8px;margin-top:8px;max-width:min(100%,max(var(--board-w,420px),300px));margin-left:auto;margin-right:auto}
   .btn{
     flex:1;height:44px;border-radius:9px;border:1px solid var(--line);background:var(--panel2);
     color:var(--ink);font-size:14px;font-family:var(--ui-font);cursor:pointer;letter-spacing:.1em;
@@ -244,6 +244,7 @@
     </div>
     <div class="pool" id="pool"></div>
     <div class="actions">
+      <button class="btn ghost" id="btn-skip">换题</button>
       <button class="btn ghost" id="btn-hint">求助</button>
       <button class="btn ghost" id="btn-del">删除</button>
       <button class="btn primary" id="btn-enter">提交</button>
@@ -264,6 +265,7 @@
       <li>每次提交一整句，字数必须与答案相同。</li>
       <li>提交后每格变色，告诉你这个字的情况。</li>
       <li>字库 30~36 字，里面藏着 3 句干扰诗句——能拼成好几句话，只有一句是答案。</li>
+      <li>做不出来可以点「换题」换一句，换过的句子短期内不会再出现。</li>
     </ul>
     <div class="demo">
       <div class="tile correct">会</div><div class="tile">当</div><div class="tile">凌</div>
@@ -483,7 +485,9 @@ function renderPool() {
     b.addEventListener("click", () => typeChar(c));
     poolEl.appendChild(b);
   }
-  poolEl.style.setProperty("--pool-cols", state.pool.length % 10 === 0 ? 10 : 9);
+  const n = state.pool.length;
+  const narrow = window.innerWidth <= 380;
+  poolEl.style.setProperty("--pool-cols", narrow ? 8 : (n % 10 === 0 ? 10 : (n % 9 === 0 ? 9 : 10)));
   $("pool-count").textContent = state.pool.length;
 }
 
@@ -769,6 +773,13 @@ document.addEventListener("keydown", e => {
 boardEl.addEventListener("click", focusIME);
 $("btn-enter").addEventListener("click", submit);
 $("btn-del").addEventListener("click", delChar);
+
+$("btn-skip").addEventListener("click", () => {
+  if (state.guesses.length && !state.done && !confirm("换题会放弃当前这一局，确定换吗？")) return;
+  startRandom();
+  focusIME();
+  toast("已换一题");
+});
 
 $("btn-hint").addEventListener("click", () => {
   if (state.done) return;

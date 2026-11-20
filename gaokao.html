@@ -244,6 +244,7 @@
     </div>
     <div class="pool" id="pool"></div>
     <div class="actions">
+      <button class="btn ghost" id="btn-skip">换题</button>
       <button class="btn ghost" id="btn-hint">求助</button>
       <button class="btn ghost" id="btn-del">删除</button>
       <button class="btn primary" id="btn-enter">提交</button>
@@ -264,6 +265,7 @@
       <li>五字 6 次机会，六字 7 次，七字 8 次。</li>
       <li>每次提交一整句，字数必须与答案相同。</li>
       <li>字库 30~40 字，藏着 5~6 句干扰名句；很多字能同时拼进好几句，只有一句是答案。</li>
+      <li>做不出来可以点「换题」换一句，换过的句子短期内不会再出现。</li>
     </ul>
     <div class="demo">
       <div class="tile correct">会</div><div class="tile">当</div><div class="tile">凌</div>
@@ -781,6 +783,13 @@ document.addEventListener("keydown", e => {
 boardEl.addEventListener("click", focusIME);
 $("btn-enter").addEventListener("click", submit);
 $("btn-del").addEventListener("click", delChar);
+
+$("btn-skip").addEventListener("click", () => {
+  if (state.guesses.length && !state.done && !confirm("换题会放弃当前这一局，确定换吗？")) return;
+  startRandom();
+  focusIME();
+  toast("已换一题");
+});
 
 $("btn-hint").addEventListener("click", () => {
   if (state.done) return;
