@@ -187,6 +187,8 @@
   .dist em{font-style:normal;width:12px;text-align:right}
   .hint-line{font-size:12px;color:var(--muted);text-align:center;padding:2px 0 8px;letter-spacing:.04em;min-height:18px}
   .hint-line b{color:var(--accent);font-weight:500}
+  .statbar{text-align:center;font-size:10px;color:var(--muted);letter-spacing:.1em;padding:10px 0 2px}
+  .statbar b{font-weight:500;color:color-mix(in srgb,var(--ink) 65%,transparent);font-family:var(--tile-font);font-size:11px}
 
   /* hidden IME input */
   .ime{
@@ -247,6 +249,7 @@
       <button class="btn primary" id="btn-enter">提交</button>
     </div>
   </div>
+  <div class="statbar" id="statbar" hidden><b id="stat-num">—</b> 次开局</div>
 </div>
 
 <input class="ime" id="ime" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="输入诗句">
@@ -796,6 +799,28 @@ $("btn-theme").addEventListener("click", () => {
 })();
 
 window.addEventListener("resize", () => { syncBoardWidth(); });
+
+/* ===================== 访问统计 ===================== */
+/* 填上 GoatCounter 的站点代码（例如 "dredowyan"）即启用；留空则完全不加载任何第三方脚本。 */
+const STATS_CODE = "";
+
+(function initStats() {
+  if (!STATS_CODE) return;
+  const sc = document.createElement("script");
+  sc.async = true;
+  sc.src = "https://gc.zgo.at/count.js";
+  sc.dataset.goatcounter = `https://${STATS_CODE}.goatcounter.com/count`;
+  document.head.appendChild(sc);
+
+  fetch(`https://${STATS_CODE}.goatcounter.com/counter/TOTAL.json`)
+    .then(r => (r.ok ? r.json() : null))
+    .then(d => {
+      if (!d || !d.count) return;
+      $("stat-num").textContent = String(d.count).trim();
+      $("statbar").hidden = false;
+    })
+    .catch(() => {});
+})();
 
 /* 启动 */
 startDaily();

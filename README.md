@@ -55,6 +55,24 @@ cd ../gaokao && python build.py  # 输出 ../gaokao.html
 
 构建时会打印不合规的句子（字数不符或含标点），直接跳过。
 
+## 访问统计
+
+页面默认**不加载任何第三方脚本**。要统计访问量，二选一：
+
+**1. GoatCounter（推荐，免费，有面板 + 可在页面显示数字）**
+
+1. 到 https://www.goatcounter.com/signup 注册，选一个站点代码（例如 `dredowyan`）
+2. 把 `junior/template.html` 和 `gaokao/template.html` 里的 `const STATS_CODE = "";` 改成 `const STATS_CODE = "dredowyan";`
+3. 重新 build 并推送，页面底部就会出现「N 次开局」，面板在 `https://dredowyan.goatcounter.com`
+
+统计不用 cookie，只记路径 / 来源 / 国家，不存 IP。
+
+**2. Cloudflare Web Analytics（要完整报表：来源、地区、路径）**
+
+在 Cloudflare 后台 Web Analytics 里添加站点 `dredowyan-byte.github.io`（不需要改 DNS），把拿到的 `<script>` 粘到两个模板的 `</body>` 前，重新 build。
+
+> GitHub 仓库自带的 Insights → Traffic 只统计 github.com 上的仓库页面，不统计 Pages 站点，看不到玩家人数。
+
 ## 许可
 
 代码 MIT。诗句均为公有领域作品。
