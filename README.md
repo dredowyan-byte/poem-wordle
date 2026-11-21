@@ -1,4 +1,4 @@
-# 名句 Wordle
+# 严老师诗词名句猜猜看
 
 猜一句古诗词的 Wordle，仿 [chengyu-wordle](https://cheeaun.github.io/chengyu-wordle/) 做的中文版，打开网页就能玩，不用安装。
 

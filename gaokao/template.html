@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="dark light">
-<title>名句 Wordle · 高中必背 60 篇</title>
+<title>严老师诗词名句猜猜看 · 高中必背 60 篇</title>
 <style>
   :root{
     --bg:#12100f; --panel:#1a1715; --panel2:#221d1a;
@@ -44,7 +44,7 @@
     display:grid;place-items:center;flex:none; transform:rotate(-2deg);
     box-shadow:0 2px 10px rgba(196,71,47,.35);
   }
-  h1{font-family:var(--tile-font); font-size:clamp(17px,4.9vw,20px); margin:0; letter-spacing:.05em; font-weight:600; white-space:nowrap}
+  h1{font-family:var(--tile-font); font-size:clamp(15px,4.15vw,20px); margin:0; letter-spacing:.05em; font-weight:600; white-space:nowrap}
   .sub{font-size:10px; color:var(--muted); letter-spacing:.12em; white-space:nowrap}
   .icon{
     width:32px;height:32px;border-radius:9px;border:1px solid var(--line);
@@ -218,6 +218,14 @@
     position:fixed;left:0;bottom:0;width:1px;height:1px;opacity:0;border:0;padding:0;
     background:transparent;color:transparent;caret-color:transparent;font-size:16px;z-index:-1;
   }
+  /* 站名变长后，窄屏要把头部整体收紧，否则标题会被右侧按钮压住 */
+  @media (max-width:400px){
+    header{gap:6px}
+    .brand{gap:6px}
+    h1{font-size:15px; letter-spacing:0}
+    .seal{width:22px;height:22px;font-size:13px}
+    .icon{width:32px;height:32px;font-size:14px}
+  }
   @media (max-width:380px){
     .app{padding-left:12px;padding-right:12px}
     .sub{display:none}
@@ -233,7 +241,7 @@
     <div class="brand">
       <div class="seal">典</div>
       <div>
-        <h1>名句 Wordle</h1>
+        <h1>严老师诗词名句猜猜看</h1>
         <div class="sub">高中必背 60 篇</div>
       </div>
     </div>
@@ -784,8 +792,8 @@ function shareText() {
   const emoji = { correct: "🟩", present: "🟨", absent: "⬛" };
   const grid = state.guesses.map(g => g.marks.map(m => emoji[m]).join("")).join("\n");
   const head = state.mode === "daily"
-    ? `名句 Wordle ${todayKey()}`
-    : `名句 Wordle · 随机`;
+    ? `严老师诗词名句猜猜看 ${todayKey()}`
+    : `严老师诗词名句猜猜看 · 随机`;
   return `${head}  ${state.win ? state.tries : "X"}/${state.maxTries}\n${grid}\n《${state.poem.t}》${state.poem.a}`;
 }
 
