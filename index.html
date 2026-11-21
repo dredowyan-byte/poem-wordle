@@ -314,6 +314,7 @@
       <span class="cap">灰：句中无此字</span>
     </div>
     <p style="margin-top:6px">题目 80% 出自初中课本（七上—九下），20% 出自课外名句。字可点选，也可用输入法直接打字。每次打开随机一题，最近玩过的 24 句不会重复；想玩当天固定的题目，在网址后加 #daily。</p>
+    <p style="margin-top:2px">同类游戏：<a class="poem-link" href="chengyu.html">严老师的成语猜猜看 ↗</a></p>
     <button class="btn primary" id="help-close" style="width:100%;margin-top:6px">开始</button>
   </div>
 </div>
@@ -919,21 +920,23 @@ window.addEventListener("resize", () => { syncBoardWidth(); });
 const STATS_CODE = "dredowyan";
 
 (function initStats() {
-  if (!STATS_CODE) return;
-  const sc = document.createElement("script");
-  sc.async = true;
-  sc.src = "https://gc.zgo.at/count.js";
-  sc.dataset.goatcounter = `https://${STATS_CODE}.goatcounter.com/count`;
-  document.head.appendChild(sc);
+  if (!STATS_CODE || typeof fetch !== "function") return;
+  try {
+    const sc = document.createElement("script");
+    sc.async = true;
+    sc.src = "https://gc.zgo.at/count.js";
+    sc.dataset.goatcounter = `https://${STATS_CODE}.goatcounter.com/count`;
+    document.head.appendChild(sc);
 
-  fetch(`https://${STATS_CODE}.goatcounter.com/counter/TOTAL.json`)
-    .then(r => (r.ok ? r.json() : null))
-    .then(d => {
-      if (!d || !d.count) return;
-      $("stat-num").textContent = String(d.count).trim();
-      $("statbar").hidden = false;
-    })
-    .catch(() => {});
+    fetch(`https://${STATS_CODE}.goatcounter.com/counter/TOTAL.json`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => {
+        if (!d || !d.count) return;
+        $("stat-num").textContent = String(d.count).trim();
+        $("statbar").hidden = false;
+      })
+      .catch(() => {});
+  } catch {}   // 统计挂了不能影响游戏本体
 })();
 
 /* ===================== 留言板 ===================== */

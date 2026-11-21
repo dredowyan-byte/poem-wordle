@@ -1,13 +1,14 @@
 # 严老师诗词名句猜猜看
 
-猜一句古诗词的 Wordle，仿 [chengyu-wordle](https://cheeaun.github.io/chengyu-wordle/) 做的中文版，打开网页就能玩，不用安装。
+仿 [chengyu-wordle](https://cheeaun.github.io/chengyu-wordle/) 做的中文猜字游戏，单文件网页，打开就能玩，不用安装。站点下有两个游戏：
 
 | 版本 | 入口 | 范围 | 机会 |
 | --- | --- | --- | --- |
 | 初中版（中考） | [`index.html`](index.html) | 统编版初中课本 + 课外名句，五言 / 七言 | 五言 6 次，七言 7 次 |
 | 高中版（高考） | [`gaokao.html`](gaokao.html) | 《高考必背古诗文 60 篇》，五字 / 六字 / 七字，诗词曲与文言文混排 | 五字 6 次，六字 7 次，七字 8 次 |
+| 成语版 | [`chengyu.html`](chengyu.html) | 四字成语，困难 / 超难两档 | 困难 6 次，超难 7 次 |
 
-两版顶部标签栏可以互相跳转。
+顶部标签栏可以互相跳转。
 
 ## 玩法
 
@@ -37,16 +38,48 @@
 
 高中版的《短歌行》《无衣》通篇四言，凑不出 5/6/7 字的句子，未收，故为 58 篇。
 
+## 成语版（chengyu.html）
+
+四字成语，去掉原版的「简单模式」，只留困难，并加一档超难：
+
+| 档位 | 题库 | 字库 | 机会 |
+| --- | --- | --- | --- |
+| 困难 | 1200 条常用成语（词频前 1200） | 24 字 | 6 次 |
+| 超难 | 2747 条（困难档 + 词频 1200~2600 + 165 条生僻成语，2.29 倍） | 30 字 | 7 次 |
+
+两档都按**困难规则**（原版 hard mode）：猜出的绿字必须留在原位，黄字必须继续用上，不满足就退回、不消耗次数。
+
+生僻档里是网上流传较广的那批：惨绿少年、兰因絮果、焚膏继晷、吉光片羽、沆瀣一气、茕茕孑立、曲突徙薪、目无全牛…… 清单在 `chengyu/prep_data.py` 的 `RARE`。
+
+其他：提交前用 26219 条成语词典校验（自己拼的字串直接退回）、提示两级（释义 → 拼音首字母）、每日一题（`#daily`）+ 随机、分档统计、emoji 分享、明暗主题、留言板、访问统计。
+
+数据来源与再生成：
+
+```bash
+cd chengyu
+pip install pypinyin
+python prep_data.py --fetch   # 下载 THUOCL 词频表 + chinese-xinhua 词典，生成 idioms_data.py
+python build.py               # 输出 ../chengyu.html
+```
+
+`data/` 里是下载的原始文件（约 10MB），已在 `.gitignore` 里排除；`idioms_data.py` 是筛好的结果，已提交，正常构建不需要联网。
+
 ## 目录结构
 
 ```
 index.html            初中版（构建产物）
 gaokao.html           高中版（构建产物）
+chengyu.html          成语版（构建产物）
 junior/               初中版源码
   poems_data.py       题库：(篇名, 作者, 朝代, [句子...])
   template.html       页面模板，含 __POEMS__ / __PINYIN__ 占位符
   build.py            校验字数 + 生成拼音 + 注入模板
 gaokao/               高中版源码（结构同上，题库多一个「文体」字段）
+chengyu/              成语版源码
+  prep_data.py        从词频表 + 词典筛出两档题库，写 idioms_data.py
+  idioms_data.py      生成产物：HARD / SUPER / DICT / PY / CHARPY / VALID
+  template.html       页面模板
+  build.py            校验题库 + 注入模板
 ```
 
 ## 本地构建
@@ -57,6 +90,7 @@ gaokao/               高中版源码（结构同上，题库多一个「文体�
 pip install pypinyin
 cd junior && python build.py     # 输出 ../index.html
 cd ../gaokao && python build.py  # 输出 ../gaokao.html
+cd ../chengyu && python build.py # 输出 ../chengyu.html
 ```
 
 构建时会打印不合规的句子（字数不符或含标点），直接跳过。
@@ -68,14 +102,14 @@ cd ../gaokao && python build.py  # 输出 ../gaokao.html
 **1. GoatCounter（推荐，免费，有面板 + 可在页面显示数字）**
 
 1. 到 https://www.goatcounter.com/signup 注册，选一个站点代码（例如 `dredowyan`）
-2. 把 `junior/template.html` 和 `gaokao/template.html` 里的 `const STATS_CODE = "";` 改成 `const STATS_CODE = "dredowyan";`
+2. 三个模板（`junior/`、`gaokao/`、`chengyu/`）里的 `const STATS_CODE` 填成站点代码，现已填 `dredowyan`
 3. 重新 build 并推送，页面底部就会出现「N 次开局」，面板在 `https://dredowyan.goatcounter.com`
 
 统计不用 cookie，只记路径 / 来源 / 国家，不存 IP。
 
 **2. Cloudflare Web Analytics（要完整报表：来源、地区、路径）**
 
-在 Cloudflare 后台 Web Analytics 里添加站点 `dredowyan-byte.github.io`（不需要改 DNS），把拿到的 `<script>` 粘到两个模板的 `</body>` 前，重新 build。
+在 Cloudflare 后台 Web Analytics 里添加站点 `dredowyan-byte.github.io`（不需要改 DNS），把拿到的 `<script>` 粘到各模板的 `</body>` 前，重新 build。
 
 > GitHub 仓库自带的 Insights → Traffic 只统计 github.com 上的仓库页面，不统计 Pages 站点，看不到玩家人数。
 
@@ -86,7 +120,7 @@ cd ../gaokao && python build.py  # 输出 ../gaokao.html
 1. 注册 https://supabase.com ，新建 project（区域选 Singapore / Tokyo，国内访问相对快）
 2. 左侧 SQL Editor → New query → 粘贴 `supabase/schema.sql` 全文 → Run
 3. Project Settings → API Keys，复制 `Project URL` 和公钥——新版控制台叫 **Publishable key**（`sb_publishable_...`），旧版叫 **anon public**（`eyJ...` 开头的 JWT），两个都能用
-4. 把这两个值填进 `junior/template.html` 和 `gaokao/template.html`：
+4. 把这两个值填进三个模板（`junior/`、`gaokao/`、`chengyu/`）：
 
 ```js
 const GUEST = {
