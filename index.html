@@ -187,6 +187,9 @@
   .dist em{font-style:normal;width:12px;text-align:right}
   .hint-line{font-size:12px;color:var(--muted);text-align:center;padding:2px 0 8px;letter-spacing:.04em;min-height:18px}
   .hint-line b{color:var(--accent);font-weight:500}
+  .poem-link{color:var(--accent);text-decoration:none;border-bottom:1px dashed currentColor;padding-bottom:1px}
+  .poem-link:active{opacity:.55}
+  html[data-theme="dark"] .poem-link{color:#e07a5f}
   /* ---------- 留言板 ---------- */
   .icon[hidden]{display:none}
   .icon.zh{font-family:var(--tile-font);font-size:15px}
@@ -284,8 +287,10 @@
     <p>猜一句五言或七言古诗（词）。五言 6 次机会，七言 7 次机会。</p>
     <ul>
       <li>每次提交一整句，字数必须与答案相同。</li>
+      <li>提交的必须是题库里完整的一句诗。凑字凑出来的、半截的句子会被退回，不算一次机会。</li>
       <li>提交后每格变色，告诉你这个字的情况。</li>
       <li>字库 30~36 字，里面藏着 3 句干扰诗句——能拼成好几句话，只有一句是答案。</li>
+      <li>「求助」第二次会给篇名，点篇名可以跳去看原文对照。</li>
       <li>做不出来可以点「换题」换一句，换过的句子短期内不会再出现。</li>
     </ul>
     <div class="demo">
@@ -343,6 +348,29 @@ const PINYIN = {"一":"yī","丁":"dīng","万":"wàn","丈":"zhàng","三":"sā
 const TB = POEMS.filter(p => p.s === "tb");
 const EX = POEMS.filter(p => p.s === "ex");
 const EXTRA_RATE = 0.2;
+
+/* 合法诗句集合：提交时必须命中，否则拒绝进格（残句、拼凑句不许提交） */
+const VALID = new Set(POEMS.map(p => p.l));
+
+/* 通假字/异文写法 → 题库标准写法（玩家习惯打"导"，题库作"道"） */
+const ALIAS = { "来吾导夫先路": "来吾道夫先路" };
+const canonical = w => ALIAS[w] || w;
+
+/* 原文链接：篇名查百科，命中即直达词条原文。
+   括号里若是版本标记（其一/节选/并序/正宫…）就丢掉；若是词牌的首句就拼成「词牌·首句」，
+   这样《声声慢（寻寻觅觅）》会直达单篇词条，而不是落到词牌列表。 */
+const URL_NAME = { "礼运（大道之行）": "大道之行也" };   // 百科按篇名收录的少数例外
+function poemUrl(t) {
+  if (URL_NAME[t]) return "https://baike.baidu.com/search/word?word=" + encodeURIComponent(URL_NAME[t]);
+  let name = t.replace(/[《》]/g, "").trim();
+  const m = name.match(/^(.+?)[（(]([^）)]*)[）)]$/);
+  if (m) {
+    const base = m[1].trim(), note = m[2].trim();
+    const versionMark = /^(其[一二三四五六七八九十]+|并序|节选|[上下]|正宫.*)$/.test(note);
+    name = versionMark || !note ? base : base + "·" + note;
+  }
+  return "https://baike.baidu.com/search/word?word=" + encodeURIComponent(name);
+}
 
 /* 题库字频，用于补足字库 */
 const FREQ = (() => {
@@ -581,7 +609,14 @@ function submit() {
     toast(`还差 ${state.len - state.cur.length} 个字`);
     return;
   }
-  const word = state.cur.join("");
+  const raw = state.cur.join("");
+  const word = canonical(raw);
+  if (!VALID.has(word)) {
+    const row = boardEl.children[state.guesses.length];
+    if (row) { row.classList.add("shake"); setTimeout(() => row.classList.remove("shake"), 420); }
+    toast("这句不在题库里，重新猜");
+    return;
+  }
   if (state.guesses.some(g => g.word === word)) {
     toast("这句猜过了");
     return;
@@ -624,7 +659,9 @@ function finish(win) {
   renderAll();
   const r = $("result");
   $("r-line").textContent = state.answer;
-  $("r-from").textContent = `《${state.poem.t}》 · ${state.poem.d} · ${state.poem.a}`;
+  $("r-from").innerHTML =
+    `<a class="poem-link" href="${poemUrl(state.poem.t)}" target="_blank" rel="noopener">《${state.poem.t}》原文↗</a>` +
+    ` · ${state.poem.d} · ${state.poem.a}`;
   $("r-note").innerHTML = win
     ? `用了 <b>${state.tries}</b> 次猜中`
     : `正确答案如上，${state.mode === "daily" ? "明天再来" : "再来一局试试"}`;
@@ -682,7 +719,9 @@ function start(poem, mode, saved) {
   if (state.done) {
     const r = $("result");
     $("r-line").textContent = state.answer;
-    $("r-from").textContent = `《${state.poem.t}》 · ${state.poem.d} · ${state.poem.a}`;
+    $("r-from").innerHTML =
+    `<a class="poem-link" href="${poemUrl(state.poem.t)}" target="_blank" rel="noopener">《${state.poem.t}》原文↗</a>` +
+    ` · ${state.poem.d} · ${state.poem.a}`;
     $("r-note").innerHTML = state.win ? `用了 <b>${state.tries}</b> 次猜中` : "正确答案如上";
     r.classList.add("show");
     document.querySelector(".tray").classList.add("tray-hidden");
@@ -824,7 +863,9 @@ $("btn-hint").addEventListener("click", () => {
   if (state.hintUsed === 1) {
     $("hintline").innerHTML = `提示：<b>${p.d} · ${p.a}</b>`;
   } else {
-    $("hintline").innerHTML = `提示：<b>《${p.t}》 · ${p.d} · ${p.a}</b>`;
+    $("hintline").innerHTML =
+      `提示：<a class="poem-link" href="${poemUrl(p.t)}" target="_blank" rel="noopener">《${p.t}》↗</a>` +
+      ` · ${p.d} · ${p.a}`;
   }
   saveProgress();
   renderAll();
