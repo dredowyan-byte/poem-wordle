@@ -463,8 +463,11 @@ const DECOY_LIST = (() => {
     for (const w of arr) {
       const chars = [...w];
       if (seen.has(w) || chars.length !== 4) continue;
+      const uniq = [...new Set(chars)];
+      // 词典里有些生造叠词（「巴巴劫劫」这类），字不在题库常用字范围内就丢掉
+      if (tier === 2 && !uniq.every(ch => CHARPY[ch])) continue;
       seen.add(w);
-      out.push({ w, uniq: [...new Set(chars)], tier, r: (hashStr(w) % 997) / 997 });
+      out.push({ w, uniq, tier, r: (hashStr(w) % 997) / 997 });
     }
   };
   push(HARD, 0);
