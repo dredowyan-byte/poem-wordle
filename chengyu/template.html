@@ -332,7 +332,7 @@
       <li><b>困难</b>：1200 条常用成语，字库 24 字，6 次机会。<br><b>超难</b>：2747 条（含「惨绿少年」「兰因絮果」「焚膏继晷」这类生僻成语），字库 30 字，7 次机会。</li>
       <li><b>不限用字</b>：猜出的黄字绿字只是线索，下一轮想用哪个字都行，只要在次数内猜中就可以。</li>
       <li>只能提交词典里真实存在的成语，自己拼的字串会被退回。</li>
-      <li>字库里藏着几句别的成语，只有一句是答案。</li>
+      <li>字库里还藏着十几个别的成语（困难档 12 个以上，超难档 14 个以上），只有一个是答案。</li>
       <li>「提示」两级：先给释义，再给拼音首字母；做不出来可以「换题」。</li>
     </ul>
     <p style="margin-top:4px">字可点选，也可用输入法打字。每次打开随机一题；想玩当天固定的题目，在网址后加 #daily。</p>
@@ -381,8 +381,8 @@ const CHARPY = __CHARPY__;
 const VALID = new Set(__VALID__.split(","));
 
 const DIFF = {
-  hard:  { key: "hard",  name: "困难", pool: HARD,  size: 24, tries: 6 },
-  super: { key: "super", name: "超难", pool: SUPER, size: 30, tries: 7 }
+  hard:  { key: "hard",  name: "困难", pool: HARD,  size: 24, tries: 6, decoys: 12 },
+  super: { key: "super", name: "超难", pool: SUPER, size: 30, tries: 7, decoys: 14 }
 };
 
 /* ===================== 工具 ===================== */
@@ -454,34 +454,50 @@ let state = {
 };
 
 /* ===================== 字库 ===================== */
-/* 答案字 + 若干"共享字"的干扰成语 + 高频字补足。
-   干扰成语按与答案共享的字数优先，所以字库里往往能拼出 2~4 个别的真成语，
-   只有一个是答案。 */
+/* 干扰成语源：常用题库优先，其余合法成语补在后面。tier 越小越常用，
+   用来保证字库里藏的干扰项是玩家可能想到的成语，而不是生僻字串。 */
+const DECOY_LIST = (() => {
+  const seen = new Set();
+  const out = [];
+  const push = (arr, tier) => {
+    for (const w of arr) {
+      const chars = [...w];
+      if (seen.has(w) || chars.length !== 4) continue;
+      seen.add(w);
+      out.push({ w, uniq: [...new Set(chars)], tier, r: (hashStr(w) % 997) / 997 });
+    }
+  };
+  push(HARD, 0);
+  push(SUPER, 1);
+  push(VALID, 2);
+  return out;
+})();
+
+/* 答案字 + 一串共享字的干扰成语 + 高频字补足。
+   干扰成语按「新增字越少、与池里已有的字重叠越多、与答案共享字越多」贪心挑选，
+   保证字库里能拼出的别的成语不少于 cfg.decoys 个，只有一个是答案。 */
 function buildPool(word, cfg) {
-  const rnd = mulberry32(hashStr(word + "#pool" + cfg.key));
   const set = new Set(word);
+  const ansSet = new Set(word);
   const target = cfg.size;
-
-  const cands = [];
-  for (const w of cfg.pool) {
-    if (w === word) continue;
-    const uniq = [...new Set(w)];
-    let shared = 0;
-    for (const c of uniq) if (set.has(c)) shared++;
-    if (shared === 0) continue;
-    cands.push({ w, uniq, shared, r: rnd() });
-  }
-
+  const want = cfg.decoys || 10;
   const picked = new Set();
-  for (let round = 0; round < 5; round++) {
+
+  for (let round = 0; round < want; round++) {
     let best = null, bestScore = -Infinity;
-    for (const c of cands) {
-      if (picked.has(c.w)) continue;
-      let fresh = 0;
-      for (const ch of c.uniq) if (!set.has(ch)) fresh++;
-      if (fresh === 0) continue;
-      if (set.size + fresh > target) continue;
-      const score = c.shared * 10 - fresh * 3 + c.r * 2;
+    for (const c of DECOY_LIST) {
+      if (picked.has(c.w) || c.w === word) continue;
+      let ov = 0, fresh = 0, ansOv = 0;
+      for (const ch of c.uniq) {
+        if (set.has(ch)) ov++;
+        else fresh++;
+        if (ansSet.has(ch)) ansOv++;
+      }
+      if (ov === 0) continue;                  // 和池里的字毫无交集就不像干扰项
+      // 生僻成语只在"白捡"时用：几乎不新增字，免得把池子撑成生僻字堆
+      if (c.tier === 2 && fresh > 1) continue;
+      if (set.size + fresh > target) continue; // 不能撑破字库上限
+      const score = -fresh * 100 + ov * 12 + ansOv * 30 - c.tier * 18 + c.r * 4;
       if (score > bestScore) { bestScore = score; best = c; }
     }
     if (!best) break;
