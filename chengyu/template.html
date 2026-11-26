@@ -83,7 +83,7 @@
   .board{
     --gap:8px;
     display:grid; gap:var(--gap); margin:0 auto;
-    width:min(100%, 300px, max(196px, calc((100dvh - 404px - (var(--rows,6) - 1) * 8px) / var(--rows,6) * var(--cols,4) + (var(--cols,4) - 1) * 8px)));
+    width:min(100%, 300px, max(196px, calc((100dvh - var(--board-reserve,404px) - (var(--rows,6) - 1) * 8px) / var(--rows,6) * var(--cols,4) + (var(--cols,4) - 1) * 8px)));
   }
   .row{display:grid; gap:8px; grid-template-columns:repeat(var(--cols,4),1fr)}
   .tile{
@@ -124,13 +124,13 @@
   /* ---------- pool / keys ---------- */
   .tray{margin-top:auto; padding-top:8px}
   .tray.tray-hidden{display:none}
-  .pool-head{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:11px;color:var(--muted);padding:0 2px 7px;letter-spacing:.08em;overflow:hidden;white-space:nowrap;max-width:min(100%,max(var(--board-w,300px),280px));margin:0 auto}
+  .pool-head{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:11px;color:var(--muted);padding:0 2px 7px;letter-spacing:.08em;overflow:hidden;white-space:nowrap;max-width:100%;margin:0 auto}
   #pool-tip{text-overflow:ellipsis;overflow:hidden}
   .pool-head b{font-weight:500;color:color-mix(in srgb,var(--ink) 70%,transparent)}
-  .pool{display:grid;grid-template-columns:repeat(var(--pool-cols,10),1fr);gap:5px;max-width:min(100%,max(var(--board-w,300px),280px));margin:0 auto}
+  .pool{display:grid;grid-template-columns:repeat(var(--pool-cols,10),1fr);gap:5px;max-width:100%;margin:0 auto}
   .key{
-    position:relative; height:42px; border-radius:8px; border:1px solid var(--line);
-    background:var(--panel); color:var(--ink); font-family:var(--tile-font); font-size:18px;
+    position:relative; height:var(--key-h,42px); border-radius:8px; border:1px solid var(--line);
+    background:var(--panel); color:var(--ink); font-family:var(--tile-font); font-size:var(--key-fs,18px);
     cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center;
     transition:transform .08s, background-color .2s, color .2s, border-color .2s; padding:0;
     line-height:1.05; min-width:0;
@@ -249,7 +249,7 @@
     .sub{display:none}
     .board-wrap{padding:6px 0 2px}
     .pool{gap:4px}
-    .key{height:36px;font-size:16px}
+    .key{height:var(--key-h,36px);font-size:var(--key-fs,16px)}
     .key .py{font-size:7px;height:8px}
     .btn{height:40px;font-size:13px}
     .statbar{padding-top:3px}
@@ -329,10 +329,10 @@
       <span class="cap">灰：成语里没有这个字</span>
     </div>
     <ul>
-      <li><b>困难</b>：1200 条常用成语，字库 24 字，6 次机会。<br><b>超难</b>：2747 条（含「惨绿少年」「兰因絮果」「焚膏继晷」这类生僻成语），字库 30 字，7 次机会。</li>
+      <li><b>困难</b>：1200 条常用成语，字库 40 字，6 次机会。<br><b>超难</b>：2747 条（含「惨绿少年」「兰因絮果」「焚膏继晷」这类生僻成语），字库 50 字，7 次机会。</li>
       <li><b>不限用字</b>：猜出的黄字绿字只是线索，下一轮想用哪个字都行，只要在次数内猜中就可以。</li>
       <li>只能提交词典里真实存在的成语，自己拼的字串会被退回。</li>
-      <li>字库里还藏着十几个别的成语（困难档 12 个以上，超难档 14 个以上），只有一个是答案。</li>
+      <li>字库里还藏着几十个别的成语（困难档 20 个以上，超难档 30 个以上），只有一个是答案。</li>
       <li>「提示」两级：先给释义，再给拼音首字母；做不出来可以「换题」。</li>
     </ul>
     <p style="margin-top:4px">字可点选，也可用输入法打字。每次打开随机一题；想玩当天固定的题目，在网址后加 #daily。</p>
@@ -381,8 +381,8 @@ const CHARPY = __CHARPY__;
 const VALID = new Set(__VALID__.split(","));
 
 const DIFF = {
-  hard:  { key: "hard",  name: "困难", pool: HARD,  size: 24, tries: 6, decoys: 12 },
-  super: { key: "super", name: "超难", pool: SUPER, size: 30, tries: 7, decoys: 14 }
+  hard:  { key: "hard",  name: "困难", pool: HARD,  size: 40, tries: 6, decoys: 20 },
+  super: { key: "super", name: "超难", pool: SUPER, size: 50, tries: 7, decoys: 28 }
 };
 
 /* ===================== 工具 ===================== */
@@ -487,6 +487,7 @@ function buildPool(word, cfg) {
   const picked = new Set();
 
   for (let round = 0; round < want; round++) {
+    if (set.size >= target) break;           // 字库已满，剩下的组合留给高频字补足
     let best = null, bestScore = -Infinity;
     for (const c of DECOY_LIST) {
       if (picked.has(c.w) || c.w === word) continue;
@@ -522,7 +523,23 @@ function buildPool(word, cfg) {
 const boardEl = $("board");
 const poolEl = $("pool");
 
+/* 字库排布：24 字 8 列 3 行，40 字 / 50 字走 10 列（4~5 行）。
+   行数越多，字格越扁、棋盘预留越高，保证整页不溢出。 */
+function poolLayout() {
+  const n = state.pool.length || 24;
+  const cols = n <= 24 ? (n % 10 === 0 ? 10 : 8) : 10;
+  const rows = Math.ceil(n / cols);
+  return {
+    cols, rows,
+    keyH: rows >= 5 ? 30 : rows === 4 ? 34 : 42,
+    keyFs: rows >= 5 ? 16 : rows === 4 ? 17 : 18,
+    reserve: 404 + (rows - 3) * 38
+  };
+}
+
 function renderBoard() {
+  const lay = poolLayout();
+  document.documentElement.style.setProperty("--board-reserve", lay.reserve + "px");
   boardEl.style.setProperty("--cols", 4);
   boardEl.style.setProperty("--rows", state.maxTries);
   boardEl.innerHTML = "";
@@ -589,7 +606,10 @@ function renderPool() {
     poolEl.appendChild(b);
   }
   const n = state.pool.length;
-  poolEl.style.setProperty("--pool-cols", n % 10 === 0 ? 10 : 8);
+  const lay = poolLayout();
+  poolEl.style.setProperty("--pool-cols", lay.cols);
+  poolEl.style.setProperty("--key-h", lay.keyH + "px");
+  poolEl.style.setProperty("--key-fs", lay.keyFs + "px");
   $("pool-count").textContent = n;
 }
 
